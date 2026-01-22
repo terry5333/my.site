@@ -3,58 +3,126 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>我的作品集</title>
+  <title>工程師作品集</title>
 </head>
+
 <body>
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
+
   <main class="container">
-    <h1>我的作品集</h1>
-
-    <div class="bar">
-      <button id="btnLogin">Google 登入</button>
-      <button id="btnLogout" hidden>登出</button>
-      <button id="btnAdd" hidden>新增作品</button>
-    </div>
-
-    <div id="projectGrid"></div>
-
-    <dialog id="modalProject">
-      <form id="projectForm" method="dialog" class="form">
-        <h3 id="modalTitle">新增作品</h3>
-
-        <label>
-          作品名稱
-          <input name="title" placeholder="作品名稱" required />
-        </label>
-
-        <label>
-          作品連結
-          <input name="url" placeholder="https://..." required />
-        </label>
-
-        <label>
-          作品縮圖（圖片網址）
-          <input name="thumb" placeholder="https://...（可留空）" />
-        </label>
-
-        <label>
-          作品介紹
-          <textarea name="description" placeholder="作品介紹"></textarea>
-        </label>
-
-        <label>
-          作品 AI Prompt
-          <textarea name="prompt" placeholder="AI Prompt"></textarea>
-        </label>
-
-        <input type="hidden" name="id" />
-
-        <div class="actions">
-          <button value="cancel" type="button" id="btnCancel">取消</button>
-          <button value="default" type="submit">儲存</button>
+    <!-- Header Bento -->
+    <section class="card hero">
+      <div class="hero-top">
+        <div class="hero-title">
+          <p class="badge">工程師 · Vibe Coding</p>
+          <h1 id="name">我的作品集</h1>
+          <p class="muted" id="tagline">LINE Bot / 校園系統 / 各種快速原型與自動化。</p>
         </div>
-      </form>
-    </dialog>
+
+        <div class="hero-actions">
+          <button class="btn ghost" id="btnLogin">Google 登入</button>
+          <button class="btn ghost" id="btnLogout" hidden>登出</button>
+          <button class="btn" id="btnAdd" hidden>＋ 新增作品</button>
+        </div>
+      </div>
+
+      <div class="hero-bottom">
+        <div class="stat">
+          <div class="stat-num" id="projectCount">0</div>
+          <div class="stat-label">作品數</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="lastUpdated">—</div>
+          <div class="stat-label">最後更新</div>
+        </div>
+        <div class="hint muted" id="authHint">訪客模式：只能瀏覽。登入後可新增/編輯/刪除。</div>
+      </div>
+    </section>
+
+    <!-- Bento Grid -->
+    <section class="bento">
+      <article class="card about">
+        <h2>自我介紹</h2>
+        <p class="muted">
+          我是一位工程師，習慣用 vibe coding 把想法快速做成可用系統。
+          擅長從需求拆解、資料流設計到前後端串接，並善用 AI prompt 加速迭代。
+        </p>
+      </article>
+
+      <article class="card social">
+        <h2>社群連結</h2>
+        <div class="social-list">
+          <a class="social-item" href="#" onclick="return false;">GitHub（可自行改成你的連結）</a>
+          <a class="social-item" href="#" onclick="return false;">LinkedIn（可自行改成你的連結）</a>
+          <a class="social-item" href="#" onclick="return false;">Email（可自行改成你的連結）</a>
+        </div>
+      </article>
+
+      <article class="card tools">
+        <div class="row-between">
+          <h2>作品列表</h2>
+          <div class="right-tools">
+            <input class="input" id="search" placeholder="搜尋作品名稱/介紹/prompt…" />
+            <select class="select" id="sort">
+              <option value="updated_desc">更新：新 → 舊</option>
+              <option value="updated_asc">更新：舊 → 新</option>
+              <option value="name_asc">名稱：A → Z</option>
+              <option value="name_desc">名稱：Z → A</option>
+            </select>
+          </div>
+        </div>
+        <p class="muted mini">提示：縮圖用「圖片網址」即可，不需要 Firebase Storage。</p>
+      </article>
+
+      <article class="card projects">
+        <div class="grid" id="projectGrid"></div>
+      </article>
+    </section>
   </main>
+
+  <!-- Modal -->
+  <dialog class="modal" id="modalProject">
+    <form method="dialog" class="modal-inner" id="projectForm">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增作品</h3>
+        <button class="icon-btn" value="cancel" aria-label="close">✕</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>作品名稱</span>
+          <input class="input" name="title" required placeholder="例如：校園請假系統" />
+        </label>
+
+        <label>
+          <span>作品連結</span>
+          <input class="input" name="url" required placeholder="https://..." />
+        </label>
+
+        <label class="full">
+          <span>作品縮圖（圖片網址）</span>
+          <input class="input" name="thumb" placeholder="https://...（可留空，會自動生成預設縮圖）" />
+        </label>
+
+        <label class="full">
+          <span>作品介紹</span>
+          <textarea class="textarea" name="description" rows="4" placeholder="做了什麼、解決什麼、你負責哪些部分"></textarea>
+        </label>
+
+        <label class="full">
+          <span>作品 AI Prompt</span>
+          <textarea class="textarea" name="prompt" rows="4" placeholder="你用來產出此作品的 prompt / 指令"></textarea>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <input type="hidden" name="id" />
+        <button class="btn ghost" value="cancel">取消</button>
+        <button class="btn" value="default">儲存</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="/src/main.js"></script>
 </body>
