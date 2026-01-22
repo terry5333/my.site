@@ -2,35 +2,52 @@ import "./styles.css";
 import { db, auth, googleProvider } from "./firebase";
 
 import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp
+  collection, addDoc, updateDoc, deleteDoc, doc,
+  onSnapshot, query, orderBy, serverTimestamp
 } from "firebase/firestore";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 const ADMIN_UID = import.meta.env.VITE_ADMIN_UID || "";
 
-const btnLogin = document.querySelector("#btnLogin");
-const btnLogout = document.querySelector("#btnLogout");
-const btnAdd = document.querySelector("#btnAdd");
-const grid = document.querySelector("#projectGrid");
+const $ = (s) => document.querySelector(s);
 
-const modal = document.querySelector("#modalProject");
-const form = document.querySelector("#projectForm");
-const modalTitle = document.querySelector("#modalTitle");
-const btnCancel = document.querySelector("#btnCancel");
+const btnLogin = $("#btnLogin");
+const btnLogout = $("#btnLogout");
+const btnAdd = $("#btnAdd");
+const authHint = $("#authHint");
+
+const projectCount = $("#projectCount");
+const lastUpdated = $("#lastUpdated");
+
+const searchInput = $("#search");
+const sortSelect = $("#sort");
+const projectGrid = $("#projectGrid");
+
+const modalProject = $("#modalProject");
+const projectForm = $("#projectForm");
+const modalTitle = $("#modalTitle");
 
 let isAdmin = false;
 let projects = [];
 
-/** ====== 小工具：預設縮圖（不用給圖也不難看） ====== */
+/** ===== helpers ===== */
+function escapeHtml(str = "") {
+  return str
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function fmtDate(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function defaultThumb(title = "Project") {
   const t = encodeURIComponent(title.slice(0, 24));
   const svg = `
@@ -51,16 +68,7 @@ function defaultThumb(title = "Project") {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-function escapeHtml(s = "") {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-/** ====== Auth ====== */
+/** ===== auth ===== */
 btnLogin.addEventListener("click", async () => {
   await signInWithPopup(auth, googleProvider);
 });
@@ -71,129 +79,178 @@ btnLogout.addEventListener("click", async () => {
 
 onAuthStateChanged(auth, (user) => {
   if (!user) isAdmin = false;
-  else isAdmin = ADMIN_UID ? user.uid === ADMIN_UID : true; // 沒填 ADMIN_UID 就是所有登入者都能管理（不建議上線）
+  else isAdmin = ADMIN_UID ? user.uid === ADMIN_UID : true;
 
   btnLogin.hidden = !!user;
   btnLogout.hidden = !user;
   btnAdd.hidden = !isAdmin;
 
-  render();
+  authHint.textContent = isAdmin
+    ? `管理員模式：你已登入，可新增/編輯/刪除（UID：${user.uid.slice(0, 8)}...)`
+    : (user ? "你已登入，但不是管理員（只能瀏覽）。" : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。");
+
+  renderProjects(getFilteredSorted());
 });
 
-/** ====== Firestore ====== */
-const colRef = collection(db, "projects");
-const q = query(colRef, orderBy("updatedAt", "desc"));
+/** ===== firestore ===== */
+const projectsCol = collection(db, "projects");
+const q = query(projectsCol, orderBy("updatedAt", "desc"));
 
 onSnapshot(q, (snap) => {
   projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  render();
+  renderProjects(getFilteredSorted());
+  updateStats(projects);
 });
 
-/** ====== UI: Modal ====== */
+/** ===== add/edit modal ===== */
 btnAdd.addEventListener("click", () => {
   if (!isAdmin) return;
   modalTitle.textContent = "新增作品";
-  form.reset();
-  form.id.value = "";
-  modal.showModal();
+  projectForm.reset();
+  projectForm.id.value = "";
+  modalProject.showModal();
 });
 
-btnCancel.addEventListener("click", () => {
-  modal.close();
-});
-
-/** ====== Create / Update ====== */
-form.addEventListener("submit", async (e) => {
+projectForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!isAdmin) return;
 
-  const id = form.id.value.trim();
-  const title = form.title.value.trim();
-  const url = form.url.value.trim();
-  const description = form.description.value.trim();
-  const prompt = form.prompt.value.trim();
+  const id = projectForm.id.value.trim();
+  const title = projectForm.title.value.trim();
+  const url = projectForm.url.value.trim();
+  const description = projectForm.description.value.trim();
+  const prompt = projectForm.prompt.value.trim();
 
-  // ✅ 只用圖片網址（沒填就用預設 SVG）
-  const thumb = form.thumb.value.trim() || defaultThumb(title);
+  const thumb = projectForm.thumb.value.trim() || defaultThumb(title);
 
   if (!id) {
-    await addDoc(colRef, {
-      title,
-      url,
-      thumb,
-      description,
-      prompt,
+    await addDoc(projectsCol, {
+      title, url, description, prompt, thumb,
       createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
+      updatedAt: serverTimestamp(),
     });
   } else {
     await updateDoc(doc(db, "projects", id), {
-      title,
-      url,
-      thumb,
-      description,
-      prompt,
-      updatedAt: serverTimestamp()
+      title, url, description, prompt, thumb,
+      updatedAt: serverTimestamp(),
     });
   }
 
-  modal.close();
+  modalProject.close();
 });
 
-/** ====== Delete ====== */
-window.delProject = async (id) => {
-  if (!isAdmin) return;
-  const ok = confirm("確定要刪除這個作品？");
-  if (!ok) return;
-  await deleteDoc(doc(db, "projects", id));
-};
+/** ===== search/sort ===== */
+function getFilteredSorted() {
+  const term = (searchInput?.value || "").trim().toLowerCase();
+  let list = [...projects];
 
-/** ====== Edit ====== */
-window.editProject = (id) => {
-  if (!isAdmin) return;
-  const p = projects.find((x) => x.id === id);
-  if (!p) return;
+  if (term) {
+    list = list.filter((p) =>
+      (p.title || "").toLowerCase().includes(term) ||
+      (p.description || "").toLowerCase().includes(term) ||
+      (p.prompt || "").toLowerCase().includes(term)
+    );
+  }
 
-  modalTitle.textContent = "編輯作品";
-  form.id.value = p.id;
-  form.title.value = p.title || "";
-  form.url.value = p.url || "";
-  form.thumb.value = (p.thumb && !p.thumb.startsWith("data:image")) ? p.thumb : "";
-  form.description.value = p.description || "";
-  form.prompt.value = p.prompt || "";
+  const sort = sortSelect?.value || "updated_desc";
+  if (sort === "updated_asc") {
+    list.sort((a, b) => (a.updatedAt?.seconds || 0) - (b.updatedAt?.seconds || 0));
+  } else if (sort === "name_asc") {
+    list.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  } else if (sort === "name_desc") {
+    list.sort((a, b) => (b.title || "").localeCompare(a.title || ""));
+  } else {
+    list.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+  }
 
-  modal.showModal();
-};
+  return list;
+}
 
-/** ====== Render ====== */
-function render() {
-  if (!projects.length) {
-    grid.innerHTML = `<p class="muted">目前沒有作品。${isAdmin ? "點「新增作品」建立第一筆吧！" : "等待管理員新增作品。"}</p>`;
+searchInput?.addEventListener("input", () => renderProjects(getFilteredSorted()));
+sortSelect?.addEventListener("change", () => renderProjects(getFilteredSorted()));
+
+/** ===== render ===== */
+function renderProjects(list) {
+  if (!list.length) {
+    projectGrid.innerHTML = `<div class="muted">目前沒有作品，${isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"}</div>`;
     return;
   }
 
-  grid.innerHTML = projects.map((p) => {
+  projectGrid.innerHTML = list.map((p) => {
     const thumb = p.thumb || defaultThumb(p.title || "Project");
+    const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
 
     return `
-      <div class="card">
-        <img class="thumb" src="${thumb}" alt="${escapeHtml(p.title || "")}" />
-        <h3>${escapeHtml(p.title || "")}</h3>
-        <a href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">🔗 作品連結</a>
-        <p class="muted">${escapeHtml(p.description || "")}</p>
+      <div class="project">
+        <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
 
-        <details>
-          <summary class="muted">查看 AI Prompt</summary>
-          <pre class="prompt">${escapeHtml(p.prompt || "")}</pre>
+        <h3>${escapeHtml(p.title || "")}</h3>
+        <div class="muted" style="font-size:13px; line-height:1.5;">
+          ${p.description ? escapeHtml(p.description) : "（尚未填寫作品介紹）"}
+        </div>
+
+        <div style="margin-top:10px;">
+          <a href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">🔗 開啟作品連結</a>
+        </div>
+
+        <details style="margin-top:10px;">
+          <summary class="muted" style="cursor:pointer;">查看 AI Prompt</summary>
+          <div class="muted" style="white-space:pre-wrap; margin-top:8px; font-size:13px; line-height:1.5;">
+            ${p.prompt ? escapeHtml(p.prompt) : "（尚未填寫 prompt）"}
+          </div>
         </details>
 
-        ${isAdmin ? `
-          <div class="row">
-            <button onclick="editProject('${p.id}')">編輯</button>
-            <button onclick="delProject('${p.id}')">刪除</button>
-          </div>
-        ` : ""}
+        <div class="meta">
+          <div class="chip">更新：${escapeHtml(updated)}</div>
+
+          ${isAdmin ? `
+            <div class="actions">
+              <button class="link-btn" data-act="edit" data-id="${p.id}">編輯</button>
+              <button class="link-btn" data-act="del" data-id="${p.id}">刪除</button>
+            </div>
+          ` : `<div></div>`}
+        </div>
       </div>
     `;
   }).join("");
+
+  projectGrid.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!isAdmin) return;
+      const act = btn.dataset.act;
+      const id = btn.dataset.id;
+      const item = projects.find((x) => x.id === id);
+      if (!item) return;
+
+      if (act === "edit") {
+        modalTitle.textContent = "編輯作品";
+        projectForm.id.value = item.id;
+        projectForm.title.value = item.title || "";
+        projectForm.url.value = item.url || "";
+        projectForm.description.value = item.description || "";
+        projectForm.prompt.value = item.prompt || "";
+        // 若原本是預設 data:image，就讓使用者自己填（避免一長串）
+        projectForm.thumb.value = (item.thumb && !String(item.thumb).startsWith("data:image")) ? item.thumb : "";
+        modalProject.showModal();
+      }
+
+      if (act === "del") {
+        const ok = confirm(`確定要刪除「${item.title || "這個作品"}」？`);
+        if (!ok) return;
+        await deleteDoc(doc(db, "projects", id));
+      }
+    });
+  });
+}
+
+function updateStats(list) {
+  projectCount.textContent = String(list.length);
+
+  let latest = null;
+  for (const p of list) {
+    if (!p.updatedAt) continue;
+    if (!latest) latest = p.updatedAt;
+    else if ((p.updatedAt.seconds || 0) > (latest.seconds || 0)) latest = p.updatedAt;
+  }
+  lastUpdated.textContent = latest ? fmtDate(latest) : "—";
 }
