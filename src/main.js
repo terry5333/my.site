@@ -2,8 +2,17 @@ import "./styles.css";
 import { db, auth, googleProvider } from "./firebase";
 
 import {
-  collection, addDoc, updateDoc, deleteDoc, doc,
-  onSnapshot, query, orderBy, serverTimestamp, setDoc, getDoc
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+  setDoc,
+  getDoc,
 } from "firebase/firestore";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -69,7 +78,9 @@ function fmtDate(ts) {
   if (!ts) return "—";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
 }
 
 function defaultThumb(title = "Project") {
@@ -94,11 +105,22 @@ function defaultThumb(title = "Project") {
 
 /** ===== Auth ===== */
 btnLogin.addEventListener("click", async () => {
-  await signInWithPopup(auth, googleProvider);
+  try {
+    console.log("login clicked");
+    await signInWithPopup(auth, googleProvider);
+  } catch (err) {
+    console.error(err);
+    alert(`登入失敗：${err.code || err.message}`);
+  }
 });
 
 btnLogout.addEventListener("click", async () => {
-  await signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.error(err);
+    alert(`登出失敗：${err.code || err.message}`);
+  }
 });
 
 onAuthStateChanged(auth, (user) => {
@@ -113,7 +135,9 @@ onAuthStateChanged(auth, (user) => {
 
   authHint.textContent = isAdmin
     ? `管理員模式：你已登入，可新增/編輯/刪除（UID：${user.uid.slice(0, 8)}...)`
-    : (user ? "你已登入，但不是管理員（只能瀏覽）。" : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。");
+    : user
+    ? "你已登入，但不是管理員（只能瀏覽）。"
+    : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。";
 
   renderProjects(getFilteredSorted());
 });
@@ -124,22 +148,34 @@ const profileDocRef = doc(db, "site", "profile");
 
 /** ===== Ensure profile doc exists ===== */
 async function ensureProfileDoc() {
-  const snap = await getDoc(profileDocRef);
-  if (!snap.exists()) {
-    await setDoc(profileDocRef, {
-      ...profile,
-      updatedAt: serverTimestamp(),
-    });
+  try {
+    const snap = await getDoc(profileDocRef);
+    if (!snap.exists()) {
+      await setDoc(profileDocRef, {
+        ...profile,
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    // 如果 rules 還沒放行，可能會失敗；不擋頁面
   }
 }
 ensureProfileDoc();
 
 /** ===== Profile listener ===== */
-onSnapshot(profileDocRef, (snap) => {
-  if (!snap.exists()) return;
-  profile = { ...profile, ...snap.data() };
-  renderProfile(profile);
-});
+onSnapshot(
+  profileDocRef,
+  (snap) => {
+    if (!snap.exists()) return;
+    profile = { ...profile, ...snap.data() };
+    renderProfile(profile);
+  },
+  (err) => {
+    console.error(err);
+    // profile 讀不到也不擋主頁
+  }
+);
 
 function renderProfile(p) {
   nameEl.textContent = p.name || "我的作品集";
@@ -158,20 +194,23 @@ function renderProfile(p) {
     return;
   }
 
-  socialList.innerHTML = items.map(([label, url]) => {
-    const safeUrl = escapeHtml(url);
-    return `
+  socialList.innerHTML = items
+    .map(([label, url]) => {
+      const safeUrl = escapeHtml(url);
+      return `
       <div class="social-item">
         <div class="muted">${label}</div>
         <a href="${safeUrl}" target="_blank" rel="noreferrer">前往</a>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 }
 
 /** ===== Edit profile ===== */
 btnEditProfile.addEventListener("click", () => {
   if (!isAdmin) return;
+
   profileForm.name.value = profile.name || "";
   profileForm.tagline.value = profile.tagline || "";
   profileForm.about.value = profile.about || "";
@@ -179,6 +218,7 @@ btnEditProfile.addEventListener("click", () => {
   profileForm.linkedin.value = profile.linkedin || "";
   profileForm.instagram.value = profile.instagram || "";
   profileForm.email.value = profile.email || "";
+
   modalProfile.showModal();
 });
 
@@ -189,27 +229,45 @@ profileForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!isAdmin) return;
 
-  await setDoc(profileDocRef, {
-    name: profileForm.name.value.trim(),
-    tagline: profileForm.tagline.value.trim(),
-    about: profileForm.about.value.trim(),
-    github: profileForm.github.value.trim(),
-    linkedin: profileForm.linkedin.value.trim(),
-    instagram: profileForm.instagram.value.trim(),
-    email: profileForm.email.value.trim(),
-    updatedAt: serverTimestamp(),
-  }, { merge: true });
+  try {
+    await setDoc(
+      profileDocRef,
+      {
+        name: profileForm.name.value.trim(),
+        tagline: profileForm.tagline.value.trim(),
+        about: profileForm.about.value.trim(),
+        github: profileForm.github.value.trim(),
+        linkedin: profileForm.linkedin.value.trim(),
+        instagram: profileForm.instagram.value.trim(),
+        email: profileForm.email.value.trim(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
 
-  modalProfile.close();
+    modalProfile.close();
+  } catch (err) {
+    console.error(err);
+    alert(`儲存個人資料失敗：${err.code || err.message}`);
+  }
 });
 
 /** ===== Projects listener ===== */
 const q = query(projectsCol, orderBy("updatedAt", "desc"));
-onSnapshot(q, (snap) => {
-  projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  renderProjects(getFilteredSorted());
-  updateStats(projects);
-});
+onSnapshot(
+  q,
+  (snap) => {
+    projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderProjects(getFilteredSorted());
+    updateStats(projects);
+  },
+  (err) => {
+    console.error(err);
+    projectGrid.innerHTML = `<div class="muted">讀取作品失敗：${escapeHtml(
+      err.code || err.message
+    )}</div>`;
+  }
+);
 
 /** ===== Project modal close/cancel fix ===== */
 btnCloseProject.addEventListener("click", () => modalProject.close());
@@ -236,20 +294,33 @@ projectForm.addEventListener("submit", async (e) => {
   const prompt = projectForm.prompt.value.trim();
   const thumb = projectForm.thumb.value.trim() || defaultThumb(title);
 
-  if (!id) {
-    await addDoc(projectsCol, {
-      title, url, description, prompt, thumb,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  } else {
-    await updateDoc(doc(db, "projects", id), {
-      title, url, description, prompt, thumb,
-      updatedAt: serverTimestamp(),
-    });
-  }
+  try {
+    if (!id) {
+      await addDoc(projectsCol, {
+        title,
+        url,
+        description,
+        prompt,
+        thumb,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(doc(db, "projects", id), {
+        title,
+        url,
+        description,
+        prompt,
+        thumb,
+        updatedAt: serverTimestamp(),
+      });
+    }
 
-  modalProject.close();
+    modalProject.close();
+  } catch (err) {
+    console.error(err);
+    alert(`儲存作品失敗：${err.code || err.message}`);
+  }
 });
 
 /** ===== Search/sort ===== */
@@ -258,51 +329,68 @@ function getFilteredSorted() {
   let list = [...projects];
 
   if (term) {
-    list = list.filter((p) =>
-      (p.title || "").toLowerCase().includes(term) ||
-      (p.description || "").toLowerCase().includes(term) ||
-      (p.prompt || "").toLowerCase().includes(term)
+    list = list.filter(
+      (p) =>
+        (p.title || "").toLowerCase().includes(term) ||
+        (p.description || "").toLowerCase().includes(term) ||
+        (p.prompt || "").toLowerCase().includes(term)
     );
   }
 
   const sort = sortSelect?.value || "updated_desc";
   if (sort === "updated_asc") {
-    list.sort((a, b) => (a.updatedAt?.seconds || 0) - (b.updatedAt?.seconds || 0));
+    list.sort(
+      (a, b) => (a.updatedAt?.seconds || 0) - (b.updatedAt?.seconds || 0)
+    );
   } else if (sort === "name_asc") {
     list.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
   } else if (sort === "name_desc") {
     list.sort((a, b) => (b.title || "").localeCompare(a.title || ""));
   } else {
-    list.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+    list.sort(
+      (a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)
+    );
   }
 
   return list;
 }
 
-searchInput?.addEventListener("input", () => renderProjects(getFilteredSorted()));
-sortSelect?.addEventListener("change", () => renderProjects(getFilteredSorted()));
+searchInput?.addEventListener("input", () =>
+  renderProjects(getFilteredSorted())
+);
+sortSelect?.addEventListener("change", () =>
+  renderProjects(getFilteredSorted())
+);
 
 /** ===== Render projects ===== */
 function renderProjects(list) {
   if (!list.length) {
-    projectGrid.innerHTML = `<div class="muted">目前沒有作品，${isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"}</div>`;
+    projectGrid.innerHTML = `<div class="muted">目前沒有作品，${
+      isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"
+    }</div>`;
     return;
   }
 
-  projectGrid.innerHTML = list.map((p, i) => {
-    const thumb = p.thumb || defaultThumb(p.title || "Project");
-    const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+  projectGrid.innerHTML = list
+    .map((p, i) => {
+      const thumb = p.thumb || defaultThumb(p.title || "Project");
+      const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+      const delay = Math.min(i * 60, 360);
 
-    // ✅ 讓每張卡片 stagger 進場（動畫更多）
-    const delay = Math.min(i * 60, 360);
-
-    return `
+      return `
       <div class="project" style="animation-delay:${delay}ms">
-        <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
+        <div class="thumb">
+          <img src="${thumb}" alt="${escapeHtml(p.title || "")}">
+        </div>
 
         <h3>${escapeHtml(p.title || "")}</h3>
+
         <div class="muted" style="font-size:13px; line-height:1.5;">
-          ${p.description ? escapeHtml(p.description) : "（尚未填寫作品介紹）"}
+          ${
+            p.description
+              ? escapeHtml(p.description)
+              : "（尚未填寫作品介紹）"
+          }
         </div>
 
         <div style="margin-top:10px;">
@@ -319,16 +407,21 @@ function renderProjects(list) {
         <div class="meta">
           <div class="chip">更新：${escapeHtml(updated)}</div>
 
-          ${isAdmin ? `
+          ${
+            isAdmin
+              ? `
             <div class="actions">
               <button class="link-btn" data-act="edit" data-id="${p.id}">編輯</button>
               <button class="link-btn" data-act="del" data-id="${p.id}">刪除</button>
             </div>
-          ` : `<div></div>`}
+          `
+              : `<div></div>`
+          }
         </div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 
   projectGrid.querySelectorAll("button[data-act]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -345,14 +438,23 @@ function renderProjects(list) {
         projectForm.url.value = item.url || "";
         projectForm.description.value = item.description || "";
         projectForm.prompt.value = item.prompt || "";
-        projectForm.thumb.value = (item.thumb && !String(item.thumb).startsWith("data:image")) ? item.thumb : "";
+        projectForm.thumb.value =
+          item.thumb && !String(item.thumb).startsWith("data:image")
+            ? item.thumb
+            : "";
         modalProject.showModal();
       }
 
       if (act === "del") {
         const ok = confirm(`確定要刪除「${item.title || "這個作品"}」？`);
         if (!ok) return;
-        await deleteDoc(doc(db, "projects", id));
+
+        try {
+          await deleteDoc(doc(db, "projects", id));
+        } catch (err) {
+          console.error(err);
+          alert(`刪除失敗：${err.code || err.message}`);
+        }
       }
     });
   });
@@ -365,7 +467,8 @@ function updateStats(list) {
   for (const p of list) {
     if (!p.updatedAt) continue;
     if (!latest) latest = p.updatedAt;
-    else if ((p.updatedAt.seconds || 0) > (latest.seconds || 0)) latest = p.updatedAt;
+    else if ((p.updatedAt.seconds || 0) > (latest.seconds || 0))
+      latest = p.updatedAt;
   }
   lastUpdated.textContent = latest ? fmtDate(latest) : "—";
 }
