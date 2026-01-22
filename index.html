@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>工程師作品集</title>
+</head>
+<body>
+  <main class="container">
+    <h1>我的作品集</h1>
+
+    <button id="btnLogin">Google 登入</button>
+    <button id="btnLogout" hidden>登出</button>
+    <button id="btnAdd" hidden>新增作品</button>
+
+    <div id="projectGrid"></div>
+  </main>
+
+  <dialog id="modalProject">
+    <form id="projectForm">
+      <input name="title" placeholder="作品名稱" required />
+      <input name="url" placeholder="作品連結" required />
+      <input type="file" name="thumbFile" accept="image/*" />
+      <textarea name="description" placeholder="作品介紹"></textarea>
+      <textarea name="prompt" placeholder="AI Prompt"></textarea>
+      <input type="hidden" name="id" />
+      <button type="submit">儲存</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
