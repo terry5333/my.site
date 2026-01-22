@@ -3,18 +3,19 @@ import { db, auth, googleProvider } from "./firebase";
 
 import {
   collection, addDoc, updateDoc, deleteDoc, doc,
-  onSnapshot, query, orderBy, serverTimestamp
+  onSnapshot, query, orderBy, serverTimestamp, setDoc, getDoc
 } from "firebase/firestore";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 const ADMIN_UID = import.meta.env.VITE_ADMIN_UID || "";
-
 const $ = (s) => document.querySelector(s);
 
+/** ===== DOM ===== */
 const btnLogin = $("#btnLogin");
 const btnLogout = $("#btnLogout");
 const btnAdd = $("#btnAdd");
+const btnEditProfile = $("#btnEditProfile");
 const authHint = $("#authHint");
 
 const projectCount = $("#projectCount");
@@ -27,11 +28,34 @@ const projectGrid = $("#projectGrid");
 const modalProject = $("#modalProject");
 const projectForm = $("#projectForm");
 const modalTitle = $("#modalTitle");
+const btnCloseProject = $("#btnCloseProject");
+const btnCancelProject = $("#btnCancelProject");
 
+const modalProfile = $("#modalProfile");
+const profileForm = $("#profileForm");
+const btnCloseProfile = $("#btnCloseProfile");
+const btnCancelProfile = $("#btnCancelProfile");
+
+const nameEl = $("#name");
+const taglineEl = $("#tagline");
+const aboutEl = $("#aboutText");
+const socialList = $("#socialList");
+
+/** ===== State ===== */
 let isAdmin = false;
 let projects = [];
+let profile = {
+  name: "我的作品集",
+  tagline: "LINE Bot / 校園系統 / 各種快速原型與自動化。",
+  about:
+    "我是一位工程師，習慣用 vibe coding 把想法快速做成可用系統。\n擅長從需求拆解、資料流設計到前後端串接，並善用 AI prompt 加速迭代。",
+  github: "",
+  linkedin: "",
+  instagram: "",
+  email: "",
+};
 
-/** ===== helpers ===== */
+/** ===== Helpers ===== */
 function escapeHtml(str = "") {
   return str
     .replaceAll("&", "&amp;")
@@ -45,7 +69,7 @@ function fmtDate(ts) {
   if (!ts) return "—";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function defaultThumb(title = "Project") {
@@ -68,7 +92,7 @@ function defaultThumb(title = "Project") {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-/** ===== auth ===== */
+/** ===== Auth ===== */
 btnLogin.addEventListener("click", async () => {
   await signInWithPopup(auth, googleProvider);
 });
@@ -83,7 +107,9 @@ onAuthStateChanged(auth, (user) => {
 
   btnLogin.hidden = !!user;
   btnLogout.hidden = !user;
+
   btnAdd.hidden = !isAdmin;
+  btnEditProfile.hidden = !isAdmin;
 
   authHint.textContent = isAdmin
     ? `管理員模式：你已登入，可新增/編輯/刪除（UID：${user.uid.slice(0, 8)}...)`
@@ -92,17 +118,104 @@ onAuthStateChanged(auth, (user) => {
   renderProjects(getFilteredSorted());
 });
 
-/** ===== firestore ===== */
+/** ===== Firestore refs ===== */
 const projectsCol = collection(db, "projects");
-const q = query(projectsCol, orderBy("updatedAt", "desc"));
+const profileDocRef = doc(db, "site", "profile");
 
+/** ===== Ensure profile doc exists ===== */
+async function ensureProfileDoc() {
+  const snap = await getDoc(profileDocRef);
+  if (!snap.exists()) {
+    await setDoc(profileDocRef, {
+      ...profile,
+      updatedAt: serverTimestamp(),
+    });
+  }
+}
+ensureProfileDoc();
+
+/** ===== Profile listener ===== */
+onSnapshot(profileDocRef, (snap) => {
+  if (!snap.exists()) return;
+  profile = { ...profile, ...snap.data() };
+  renderProfile(profile);
+});
+
+function renderProfile(p) {
+  nameEl.textContent = p.name || "我的作品集";
+  taglineEl.textContent = p.tagline || "";
+  aboutEl.textContent = p.about || "";
+
+  const items = [
+    ["GitHub", p.github],
+    ["LinkedIn", p.linkedin],
+    ["Instagram", p.instagram],
+    ["Email", p.email ? `mailto:${p.email}` : ""],
+  ].filter(([, v]) => !!v);
+
+  if (!items.length) {
+    socialList.innerHTML = `<div class="muted">尚未設定社群連結。</div>`;
+    return;
+  }
+
+  socialList.innerHTML = items.map(([label, url]) => {
+    const safeUrl = escapeHtml(url);
+    return `
+      <div class="social-item">
+        <div class="muted">${label}</div>
+        <a href="${safeUrl}" target="_blank" rel="noreferrer">前往</a>
+      </div>
+    `;
+  }).join("");
+}
+
+/** ===== Edit profile ===== */
+btnEditProfile.addEventListener("click", () => {
+  if (!isAdmin) return;
+  profileForm.name.value = profile.name || "";
+  profileForm.tagline.value = profile.tagline || "";
+  profileForm.about.value = profile.about || "";
+  profileForm.github.value = profile.github || "";
+  profileForm.linkedin.value = profile.linkedin || "";
+  profileForm.instagram.value = profile.instagram || "";
+  profileForm.email.value = profile.email || "";
+  modalProfile.showModal();
+});
+
+btnCloseProfile.addEventListener("click", () => modalProfile.close());
+btnCancelProfile.addEventListener("click", () => modalProfile.close());
+
+profileForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!isAdmin) return;
+
+  await setDoc(profileDocRef, {
+    name: profileForm.name.value.trim(),
+    tagline: profileForm.tagline.value.trim(),
+    about: profileForm.about.value.trim(),
+    github: profileForm.github.value.trim(),
+    linkedin: profileForm.linkedin.value.trim(),
+    instagram: profileForm.instagram.value.trim(),
+    email: profileForm.email.value.trim(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+
+  modalProfile.close();
+});
+
+/** ===== Projects listener ===== */
+const q = query(projectsCol, orderBy("updatedAt", "desc"));
 onSnapshot(q, (snap) => {
   projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   renderProjects(getFilteredSorted());
   updateStats(projects);
 });
 
-/** ===== add/edit modal ===== */
+/** ===== Project modal close/cancel fix ===== */
+btnCloseProject.addEventListener("click", () => modalProject.close());
+btnCancelProject.addEventListener("click", () => modalProject.close());
+
+/** ===== Add project ===== */
 btnAdd.addEventListener("click", () => {
   if (!isAdmin) return;
   modalTitle.textContent = "新增作品";
@@ -111,6 +224,7 @@ btnAdd.addEventListener("click", () => {
   modalProject.showModal();
 });
 
+/** ===== Submit create/edit ===== */
 projectForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!isAdmin) return;
@@ -120,7 +234,6 @@ projectForm.addEventListener("submit", async (e) => {
   const url = projectForm.url.value.trim();
   const description = projectForm.description.value.trim();
   const prompt = projectForm.prompt.value.trim();
-
   const thumb = projectForm.thumb.value.trim() || defaultThumb(title);
 
   if (!id) {
@@ -139,7 +252,7 @@ projectForm.addEventListener("submit", async (e) => {
   modalProject.close();
 });
 
-/** ===== search/sort ===== */
+/** ===== Search/sort ===== */
 function getFilteredSorted() {
   const term = (searchInput?.value || "").trim().toLowerCase();
   let list = [...projects];
@@ -169,19 +282,22 @@ function getFilteredSorted() {
 searchInput?.addEventListener("input", () => renderProjects(getFilteredSorted()));
 sortSelect?.addEventListener("change", () => renderProjects(getFilteredSorted()));
 
-/** ===== render ===== */
+/** ===== Render projects ===== */
 function renderProjects(list) {
   if (!list.length) {
     projectGrid.innerHTML = `<div class="muted">目前沒有作品，${isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"}</div>`;
     return;
   }
 
-  projectGrid.innerHTML = list.map((p) => {
+  projectGrid.innerHTML = list.map((p, i) => {
     const thumb = p.thumb || defaultThumb(p.title || "Project");
     const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
 
+    // ✅ 讓每張卡片 stagger 進場（動畫更多）
+    const delay = Math.min(i * 60, 360);
+
     return `
-      <div class="project">
+      <div class="project" style="animation-delay:${delay}ms">
         <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
 
         <h3>${escapeHtml(p.title || "")}</h3>
@@ -229,7 +345,6 @@ function renderProjects(list) {
         projectForm.url.value = item.url || "";
         projectForm.description.value = item.description || "";
         projectForm.prompt.value = item.prompt || "";
-        // 若原本是預設 data:image，就讓使用者自己填（避免一長串）
         projectForm.thumb.value = (item.thumb && !String(item.thumb).startsWith("data:image")) ? item.thumb : "";
         modalProject.showModal();
       }
