@@ -3,30 +3,58 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>工程師作品集</title>
+  <title>我的作品集</title>
 </head>
 <body>
   <main class="container">
     <h1>我的作品集</h1>
 
-    <button id="btnLogin">Google 登入</button>
-    <button id="btnLogout" hidden>登出</button>
-    <button id="btnAdd" hidden>新增作品</button>
+    <div class="bar">
+      <button id="btnLogin">Google 登入</button>
+      <button id="btnLogout" hidden>登出</button>
+      <button id="btnAdd" hidden>新增作品</button>
+    </div>
 
     <div id="projectGrid"></div>
-  </main>
 
-  <dialog id="modalProject">
-    <form id="projectForm">
-      <input name="title" placeholder="作品名稱" required />
-      <input name="url" placeholder="作品連結" required />
-      <input type="file" name="thumbFile" accept="image/*" />
-      <textarea name="description" placeholder="作品介紹"></textarea>
-      <textarea name="prompt" placeholder="AI Prompt"></textarea>
-      <input type="hidden" name="id" />
-      <button type="submit">儲存</button>
-    </form>
-  </dialog>
+    <dialog id="modalProject">
+      <form id="projectForm" method="dialog" class="form">
+        <h3 id="modalTitle">新增作品</h3>
+
+        <label>
+          作品名稱
+          <input name="title" placeholder="作品名稱" required />
+        </label>
+
+        <label>
+          作品連結
+          <input name="url" placeholder="https://..." required />
+        </label>
+
+        <label>
+          作品縮圖（圖片網址）
+          <input name="thumb" placeholder="https://...（可留空）" />
+        </label>
+
+        <label>
+          作品介紹
+          <textarea name="description" placeholder="作品介紹"></textarea>
+        </label>
+
+        <label>
+          作品 AI Prompt
+          <textarea name="prompt" placeholder="AI Prompt"></textarea>
+        </label>
+
+        <input type="hidden" name="id" />
+
+        <div class="actions">
+          <button value="cancel" type="button" id="btnCancel">取消</button>
+          <button value="default" type="submit">儲存</button>
+        </div>
+      </form>
+    </dialog>
+  </main>
 
   <script type="module" src="/src/main.js"></script>
 </body>
