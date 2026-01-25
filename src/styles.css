@@ -188,12 +188,17 @@ h3{ margin:0; font-size:18px; }
   gap:10px;
   flex-wrap:wrap;
 }
+
+/* ✅ 修正搜尋框溢出：讓工具列可縮放、不爆框 */
 .right-tools{
   display:flex;
   gap:10px;
   align-items:center;
   flex-wrap:wrap;
+  width:100%;
+  min-width:0;
 }
+
 .input,.select,.textarea{
   border:1px solid rgba(255,255,255,.14);
   background:rgba(0,0,0,.18);
@@ -204,8 +209,22 @@ h3{ margin:0; font-size:18px; }
   transition: border-color .2s ease, transform .12s ease;
 }
 .input:focus,.select:focus,.textarea:focus{ border-color: rgba(207,152,147,.6); }
-.input{ width:260px; }
-@media (max-width: 640px){ .input{ width:100%; } }
+
+/* ✅ input 不固定寬度，改 flex */
+.input{
+  flex:1 1 220px;
+  min-width:0;
+  width:auto;
+}
+.select{
+  flex:0 0 auto;
+  min-width:160px;
+}
+
+@media (max-width: 640px){
+  .right-tools{ flex-direction:column; align-items:stretch; }
+  .select{ width:100%; }
+}
 
 .grid{
   display:grid;
@@ -254,6 +273,7 @@ h3{ margin:0; font-size:18px; }
 
 .meta{
   display:flex;
+  flex-wrap:wrap;
   justify-content:space-between;
   align-items:center;
   gap:10px;
@@ -281,7 +301,7 @@ h3{ margin:0; font-size:18px; }
 .link-btn:hover{ filter:brightness(1.08); transform: translateY(-1px); }
 .link-btn:active{ transform: translateY(0) scale(.98); }
 
-/* Modal animation */
+/* Modal */
 .modal{
   width:min(860px, calc(100vw - 24px));
   border:none;
@@ -332,4 +352,13 @@ label span{
   justify-content:flex-end;
   gap:10px;
   margin-top:12px;
+}
+
+/* ✅ Turnstile 外框 */
+.turnstile-wrap{
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.03);
 }
