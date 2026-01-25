@@ -1,25 +1,20 @@
-// ⚠️ 這行一定要在最上面，確保 CSS 進 bundle
 import "./styles.css";
-
 import { db, auth, googleProvider } from "./firebase";
+
 import {
   collection, addDoc, updateDoc, deleteDoc, doc,
-  onSnapshot, query, orderBy, serverTimestamp,
-  increment, setDoc, getDoc
+  onSnapshot, query, orderBy, serverTimestamp, setDoc, getDoc,
+  increment
 } from "firebase/firestore";
-import {
-  signInWithPopup, signOut, onAuthStateChanged
-} from "firebase/auth";
 
-/* ======================
-   基本設定
-====================== */
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+
 const ADMIN_UID = import.meta.env.VITE_ADMIN_UID || "";
 const $ = (s) => document.querySelector(s);
 
-/* ======================
+/* =========================
    Turnstile Gate（穩定版）
-====================== */
+========================= */
 const gate = $("#gate");
 const gateMsg = $("#gateMsg");
 const PASS_KEY = "turnstile_passed_session";
@@ -29,42 +24,45 @@ function unlockSite(reason = "success") {
   gatePassed = true;
   sessionStorage.setItem(PASS_KEY, "1");
   gate?.classList.add("is-hidden");
-  gateMsg && (gateMsg.textContent = "");
+  if (gateMsg) gateMsg.textContent = "";
   console.log("Gate unlocked ✅", reason);
 }
-
 function lockSite(msg = "") {
   gatePassed = false;
   sessionStorage.removeItem(PASS_KEY);
   gate?.classList.remove("is-hidden");
-  gateMsg && (gateMsg.textContent = msg);
+  if (gateMsg) gateMsg.textContent = msg;
   console.log("Gate locked 🔒", msg);
 }
 
-// Turnstile callback（一定要全域）
-window.onTurnstileSuccess = () => unlockSite("callback");
-window.onTurnstileExpired = () => lockSite("驗證已過期，請重新驗證");
-window.onTurnstileError = () => lockSite("驗證錯誤，請重新整理");
+function onTurnstileSuccess() { unlockSite("callback"); }
+function onTurnstileExpired() { lockSite("驗證已過期，請重新驗證。"); }
+function onTurnstileError() { lockSite("驗證發生錯誤，請重整頁面或稍後再試。"); }
+
+window.onTurnstileSuccess = onTurnstileSuccess;
+window.onTurnstileExpired = onTurnstileExpired;
+window.onTurnstileError = onTurnstileError;
 
 if (gatePassed) unlockSite("session");
-else lockSite();
+else lockSite("");
 
-/* 救援機制：避免 callback 偶發沒觸發 */
-let rescueTry = 0;
+let rescueTries = 0;
 const rescueTimer = setInterval(() => {
-  if (gatePassed) return clearInterval(rescueTimer);
-  rescueTry++;
-  const token = document.querySelector('input[name="cf-turnstile-response"]')?.value;
+  if (gatePassed) { clearInterval(rescueTimer); return; }
+  rescueTries++;
+  const tokenEl = document.querySelector('input[name="cf-turnstile-response"]');
+  const token = tokenEl?.value?.trim();
   if (token) {
-    unlockSite("rescue");
+    unlockSite("rescue-token");
     clearInterval(rescueTimer);
+    return;
   }
-  if (rescueTry > 25) clearInterval(rescueTimer);
+  if (rescueTries >= 25) clearInterval(rescueTimer);
 }, 400);
 
-/* ======================
+/* =========================
    DOM
-====================== */
+========================= */
 const btnLogin = $("#btnLogin");
 const btnLogout = $("#btnLogout");
 const btnAdd = $("#btnAdd");
@@ -78,159 +76,637 @@ const searchInput = $("#search");
 const sortSelect = $("#sort");
 const routeRoot = $("#routeRoot");
 const listToolbar = $("#listToolbar");
+const tagBar = $("#tagBar");
 
 const modalProject = $("#modalProject");
 const projectForm = $("#projectForm");
 const modalTitle = $("#modalTitle");
+const btnCloseProject = $("#btnCloseProject");
+const btnCancelProject = $("#btnCancelProject");
 
 const modalProfile = $("#modalProfile");
 const profileForm = $("#profileForm");
+const btnCloseProfile = $("#btnCloseProfile");
+const btnCancelProfile = $("#btnCancelProfile");
 
 const nameEl = $("#name");
 const taglineEl = $("#tagline");
 const aboutEl = $("#aboutText");
 const socialList = $("#socialList");
+const pageTitle = $("#pageTitle");
+const pageHint = $("#pageHint");
 
-/* ======================
-   狀態
-====================== */
+/* =========================
+   State
+========================= */
 let isAdmin = false;
 let projects = [];
+let activeTag = "ALL";
+
 let profile = {
   name: "我的作品集",
   tagline: "LINE Bot / 校園系統 / 各種快速原型與自動化。",
-  about: "我是一位工程師，習慣用 vibe coding 把想法快速做成可用系統。",
+  about:
+    "我是一位工程師，習慣用 vibe coding 把想法快速做成可用系統。\n擅長從需求拆解、資料流設計到前後端串接，並善用 AI prompt 加速迭代。",
+  github: "",
+  linkedin: "",
+  instagram: "",
+  email: "",
 };
 
-/* ======================
+/* =========================
+   Helpers
+========================= */
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function fmtDate(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function defaultThumb(title = "Project") {
+  const t = encodeURIComponent(title.slice(0, 24));
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#cf9893" stop-opacity="0.75"/>
+        <stop offset="0.5" stop-color="#a96da3" stop-opacity="0.55"/>
+        <stop offset="1" stop-color="#3b3b58" stop-opacity="0.95"/>
+      </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="url(#g)"/>
+    <circle cx="220" cy="160" r="180" fill="#bc7c9c" fill-opacity="0.25"/>
+    <circle cx="1040" cy="560" r="240" fill="#7a5980" fill-opacity="0.22"/>
+    <text x="70" y="560" font-family="ui-sans-serif,system-ui" font-size="64" fill="rgba(255,255,255,0.92)">${t}</text>
+    <text x="70" y="630" font-family="ui-sans-serif,system-ui" font-size="28" fill="rgba(255,255,255,0.70)">Portfolio</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function setMeta({ title, description }) {
+  document.title = title || "工程師作品集";
+  const d = document.querySelector('meta[name="description"]');
+  if (d && description) d.setAttribute("content", description);
+
+  const ogt = document.querySelector('meta[property="og:title"]');
+  const ogd = document.querySelector('meta[property="og:description"]');
+  const twt = document.querySelector('meta[name="twitter:title"]');
+  const twd = document.querySelector('meta[name="twitter:description"]');
+
+  if (ogt && title) ogt.setAttribute("content", title);
+  if (twt && title) twt.setAttribute("content", title);
+  if (ogd && description) ogd.setAttribute("content", description);
+  if (twd && description) twd.setAttribute("content", description);
+}
+
+function navigate(hash) {
+  window.location.hash = hash;
+}
+
+function getRoute() {
+  const h = window.location.hash || "#/";
+  const m = h.match(/^#\/project\/(.+)$/);
+  if (m) return { name: "project", id: m[1] };
+  return { name: "home" };
+}
+
+/* =========================
    Auth
-====================== */
-btnLogin.onclick = async () => {
+========================= */
+btnLogin.addEventListener("click", async () => {
   if (!gatePassed) return;
-  await signInWithPopup(auth, googleProvider);
-};
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch (err) {
+    console.error(err);
+    alert(`登入失敗：${err.code || err.message}`);
+  }
+});
 
-btnLogout.onclick = async () => {
+btnLogout.addEventListener("click", async () => {
   if (!gatePassed) return;
-  await signOut(auth);
-};
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.error(err);
+    alert(`登出失敗：${err.code || err.message}`);
+  }
+});
 
 onAuthStateChanged(auth, (user) => {
-  isAdmin = user && (!ADMIN_UID || user.uid === ADMIN_UID);
+  if (!user) isAdmin = false;
+  else isAdmin = ADMIN_UID ? user.uid === ADMIN_UID : true;
 
   btnLogin.hidden = !!user;
   btnLogout.hidden = !user;
+
   btnAdd.hidden = !isAdmin;
   btnEditProfile.hidden = !isAdmin;
 
   authHint.textContent = isAdmin
-    ? "管理員模式"
-    : user ? "已登入（非管理員）" : "訪客模式";
+    ? `管理員模式：你已登入，可新增/編輯/刪除（UID：${user.uid.slice(0, 8)}...)`
+    : (user ? "你已登入，但不是管理員（只能瀏覽）。" : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。");
 
-  render();
+  renderRoute();
 });
 
-/* ======================
+/* =========================
    Firestore
-====================== */
+========================= */
 const projectsCol = collection(db, "projects");
-const profileDoc = doc(db, "site", "profile");
+const profileDocRef = doc(db, "site", "profile");
 
-(async () => {
-  const snap = await getDoc(profileDoc);
-  if (!snap.exists()) {
-    await setDoc(profileDoc, {
-      ...profile,
-      updatedAt: serverTimestamp(),
-    });
+/* ensure profile exists */
+(async function ensureProfileDoc() {
+  try {
+    const snap = await getDoc(profileDocRef);
+    if (!snap.exists()) {
+      await setDoc(profileDocRef, { ...profile, updatedAt: serverTimestamp() });
+    }
+  } catch (err) {
+    console.error(err);
   }
 })();
 
-onSnapshot(profileDoc, (snap) => {
+/* profile listener */
+onSnapshot(profileDocRef, (snap) => {
   if (!snap.exists()) return;
   profile = { ...profile, ...snap.data() };
-  renderProfile();
+  renderProfile(profile);
+}, (err) => console.error(err));
+
+function renderProfile(p) {
+  nameEl.textContent = p.name || "我的作品集";
+  taglineEl.textContent = p.tagline || "";
+  aboutEl.textContent = p.about || "";
+
+  const items = [
+    ["GitHub", p.github],
+    ["LinkedIn", p.linkedin],
+    ["Instagram", p.instagram],
+    ["Email", p.email ? `mailto:${p.email}` : ""],
+  ].filter(([, v]) => !!v);
+
+  if (!items.length) {
+    socialList.innerHTML = `<div class="muted">尚未設定社群連結。</div>`;
+    return;
+  }
+
+  socialList.innerHTML = items.map(([label, url]) => `
+    <div class="social-item">
+      <div class="muted">${escapeHtml(label)}</div>
+      <a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">前往</a>
+    </div>
+  `).join("");
+}
+
+/* edit profile */
+btnEditProfile.addEventListener("click", () => {
+  if (!gatePassed) return;
+  if (!isAdmin) return;
+
+  profileForm.name.value = profile.name || "";
+  profileForm.tagline.value = profile.tagline || "";
+  profileForm.about.value = profile.about || "";
+  profileForm.github.value = profile.github || "";
+  profileForm.linkedin.value = profile.linkedin || "";
+  profileForm.instagram.value = profile.instagram || "";
+  profileForm.email.value = profile.email || "";
+
+  modalProfile.showModal();
 });
 
-onSnapshot(
-  query(projectsCol, orderBy("updatedAt", "desc")),
-  (snap) => {
-    projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    render();
+btnCloseProfile.addEventListener("click", () => modalProfile.close());
+btnCancelProfile.addEventListener("click", () => modalProfile.close());
+
+profileForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!gatePassed) return;
+  if (!isAdmin) return;
+
+  try {
+    await setDoc(profileDocRef, {
+      name: profileForm.name.value.trim(),
+      tagline: profileForm.tagline.value.trim(),
+      about: profileForm.about.value.trim(),
+      github: profileForm.github.value.trim(),
+      linkedin: profileForm.linkedin.value.trim(),
+      instagram: profileForm.instagram.value.trim(),
+      email: profileForm.email.value.trim(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+
+    modalProfile.close();
+  } catch (err) {
+    console.error(err);
+    alert(`儲存個人資料失敗：${err.code || err.message}`);
   }
-);
+});
 
-/* ======================
-   Render
-====================== */
-function renderProfile() {
-  nameEl.textContent = profile.name;
-  taglineEl.textContent = profile.tagline;
-  aboutEl.textContent = profile.about;
+/* projects listener */
+const q = query(projectsCol, orderBy("updatedAt", "desc"));
+onSnapshot(q, (snap) => {
+  projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  renderTagBar(projects);
+  updateStats(projects);
+  renderRoute();
+}, (err) => {
+  console.error(err);
+  routeRoot.innerHTML = `<div class="empty">
+    <div class="title">讀取作品失敗</div>
+    <div class="desc">${escapeHtml(err.code || err.message)}</div>
+  </div>`;
+});
+
+/* =========================
+   Tag system
+========================= */
+function renderTagBar(allProjects) {
+  if (!tagBar) return;
+
+  const set = new Set();
+  allProjects.forEach(p => (p.tags || []).forEach(t => set.add(t)));
+  const tags = Array.from(set).sort((a,b) => a.localeCompare(b));
+
+  const btn = (key, label) =>
+    `<span class="tag-chip ${activeTag === key ? "active" : ""}" data-tag="${escapeHtml(key)}">${escapeHtml(label)}</span>`;
+
+  tagBar.innerHTML = [
+    btn("ALL", "全部"),
+    ...tags.map(t => btn(t, `#${t}`))
+  ].join("");
+
+  tagBar.querySelectorAll(".tag-chip").forEach(el => {
+    el.addEventListener("click", () => {
+      activeTag = el.dataset.tag || "ALL";
+      renderRoute();
+    });
+  });
 }
 
-function render() {
-  projectCount.textContent = projects.length;
-  lastUpdated.textContent =
-    projects[0]?.updatedAt?.toDate?.().toLocaleString() || "—";
+/* =========================
+   Modals
+========================= */
+btnCloseProject.addEventListener("click", () => modalProject.close());
+btnCancelProject.addEventListener("click", () => modalProject.close());
 
-  renderList();
-}
+btnAdd.addEventListener("click", () => {
+  if (!gatePassed) return;
+  if (!isAdmin) return;
 
-function renderList() {
+  modalTitle.textContent = "新增作品";
+  projectForm.reset();
+  projectForm.id.value = "";
+  projectForm.tags.value = "";
+  modalProject.showModal();
+});
+
+projectForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!gatePassed) return;
+  if (!isAdmin) return;
+
+  const id = projectForm.id.value.trim();
+  const title = projectForm.title.value.trim();
+  const url = projectForm.url.value.trim();
+  const description = projectForm.description.value.trim();
+  const prompt = projectForm.prompt.value.trim();
+  const thumb = projectForm.thumb.value.trim() || defaultThumb(title);
+
+  const rawTags = (projectForm.tags?.value || "").trim();
+  const tags = rawTags
+    .split(/[,，]/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  const uniqTags = [...new Set(tags)].slice(0, 10);
+
+  try {
+    if (!id) {
+      await addDoc(projectsCol, {
+        title, url, description, prompt, thumb,
+        tags: uniqTags,
+        views: 0,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(doc(db, "projects", id), {
+        title, url, description, prompt, thumb,
+        tags: uniqTags,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    modalProject.close();
+  } catch (err) {
+    console.error(err);
+    alert(`儲存作品失敗：${err.code || err.message}`);
+  }
+});
+
+/* =========================
+   Search / Sort
+========================= */
+function getFilteredSorted() {
+  const term = (searchInput?.value || "").trim().toLowerCase();
   let list = [...projects];
-  const term = searchInput.value.trim().toLowerCase();
+
+  if (activeTag !== "ALL") {
+    list = list.filter(p => (p.tags || []).includes(activeTag));
+  }
+
   if (term) {
-    list = list.filter(
-      (p) =>
-        p.title?.toLowerCase().includes(term) ||
-        p.description?.toLowerCase().includes(term) ||
-        p.prompt?.toLowerCase().includes(term)
+    list = list.filter((p) =>
+      (p.title || "").toLowerCase().includes(term) ||
+      (p.description || "").toLowerCase().includes(term) ||
+      (p.prompt || "").toLowerCase().includes(term) ||
+      (p.tags || []).some(t => String(t).toLowerCase().includes(term))
     );
   }
 
-  routeRoot.innerHTML = `
-    <div class="grid">
-      ${list
-        .map(
-          (p) => `
-        <div class="project">
-          <div class="thumb"><img src="${p.thumb || ""}"></div>
-          <h3>${p.title}</h3>
-          <p class="muted">${p.description || ""}</p>
-          ${isAdmin ? `<div class="chip">👁 ${p.views || 0}</div>` : ""}
-          <a class="btn" target="_blank" href="${p.url}">開啟作品</a>
-        </div>`
-        )
-        .join("")}
-    </div>
-  `;
+  const sort = sortSelect?.value || "updated_desc";
+  if (sort === "updated_asc") {
+    list.sort((a, b) => (a.updatedAt?.seconds || 0) - (b.updatedAt?.seconds || 0));
+  } else if (sort === "name_asc") {
+    list.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+  } else if (sort === "name_desc") {
+    list.sort((a, b) => (b.title || "").localeCompare(a.title || ""));
+  } else {
+    list.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+  }
+  return list;
 }
 
-/* ======================
-   新增作品
-====================== */
-btnAdd.onclick = () => {
-  modalTitle.textContent = "新增作品";
-  projectForm.reset();
-  modalProject.showModal();
-};
+searchInput?.addEventListener("input", () => renderRoute());
+sortSelect?.addEventListener("change", () => renderRoute());
 
-projectForm.onsubmit = async (e) => {
-  e.preventDefault();
-  if (!isAdmin) return;
+/* =========================
+   Routing
+========================= */
+window.addEventListener("hashchange", () => renderRoute());
 
-  const f = projectForm;
-  await addDoc(projectsCol, {
-    title: f.title.value,
-    url: f.url.value,
-    description: f.description.value,
-    prompt: f.prompt.value,
-    thumb: f.thumb.value,
-    views: 0,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+function renderRoute() {
+  const r = getRoute();
+
+  if (r.name === "home") {
+    pageTitle.textContent = "作品列表";
+    pageHint.textContent = "提示：點作品卡片可進入詳細頁；縮圖可用圖片網址。";
+    if (listToolbar) listToolbar.style.display = "";
+
+    setMeta({
+      title: `${profile.name || "工程師作品集"}`,
+      description: profile.tagline || "作品集網站"
+    });
+
+    return renderProjects(getFilteredSorted());
+  }
+
+  if (r.name === "project") {
+    if (listToolbar) listToolbar.style.display = "none";
+    return renderProjectDetail(r.id);
+  }
+}
+
+/* =========================
+   Render list
+========================= */
+function renderProjects(list) {
+  if (!list.length) {
+    routeRoot.innerHTML = `<div class="empty">
+      <div class="title">沒有符合的作品</div>
+      <div class="desc">${activeTag !== "ALL" ? `目前標籤：#${escapeHtml(activeTag)}，你可以改選其他標籤。` : (isAdmin ? "點右上角新增一個作品吧。" : "等待管理員新增作品後就會出現。")}</div>
+    </div>`;
+    return;
+  }
+
+  routeRoot.innerHTML = `
+    <div class="grid" id="projectGrid">
+      ${list.map((p, i) => {
+        const thumb = p.thumb || defaultThumb(p.title || "Project");
+        const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+        const delay = Math.min(i * 60, 360);
+
+        const tagsHtml = (p.tags && p.tags.length) ? `
+          <div class="tags">
+            ${p.tags.map(t => `<span class="chip">#${escapeHtml(t)}</span>`).join("")}
+          </div>
+        ` : ``;
+
+        return `
+          <div class="project" data-id="${p.id}" style="animation-delay:${delay}ms">
+            <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
+
+            <h3>${escapeHtml(p.title || "")}</h3>
+
+            <div class="muted desc" style="font-size:13px; line-height:1.5;">
+              ${p.description ? escapeHtml(p.description) : "（尚未填寫作品介紹）"}
+            </div>
+
+            ${tagsHtml}
+
+            <div class="meta">
+              <div class="chip">更新：${escapeHtml(updated)}</div>
+              ${isAdmin ? `<div class="chip">👁 ${Number(p.views || 0)}</div>` : ``}
+
+              ${isAdmin ? `
+                <div class="actions">
+                  <button class="link-btn" data-act="edit" data-id="${p.id}">編輯</button>
+                  <button class="link-btn" data-act="del" data-id="${p.id}">刪除</button>
+                </div>
+              ` : `<div></div>`}
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+
+  const grid = routeRoot.querySelector("#projectGrid");
+
+  // 點卡片進詳細頁（點按鈕不跳）
+  grid.querySelectorAll(".project").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (btn) return;
+      navigate(`#/project/${card.dataset.id}`);
+    });
   });
 
-  modalProject.close();
-};
+  // 編輯/刪除
+  grid.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!gatePassed) return;
+      if (!isAdmin) return;
+
+      const act = btn.dataset.act;
+      const id = btn.dataset.id;
+      const item = projects.find((x) => x.id === id);
+      if (!item) return;
+
+      if (act === "edit") {
+        modalTitle.textContent = "編輯作品";
+        projectForm.id.value = item.id;
+        projectForm.title.value = item.title || "";
+        projectForm.url.value = item.url || "";
+        projectForm.description.value = item.description || "";
+        projectForm.prompt.value = item.prompt || "";
+        projectForm.thumb.value = (item.thumb && !String(item.thumb).startsWith("data:image")) ? item.thumb : "";
+        projectForm.tags.value = (item.tags || []).join(", ");
+        modalProject.showModal();
+      }
+
+      if (act === "del") {
+        const ok = confirm(`確定要刪除「${item.title || "這個作品"}」？`);
+        if (!ok) return;
+        try {
+          await deleteDoc(doc(db, "projects", id));
+        } catch (err) {
+          console.error(err);
+          alert(`刪除失敗：${err.code || err.message}`);
+        }
+      }
+    });
+  });
+}
+
+/* =========================
+   Detail page
+========================= */
+function renderProjectDetail(id) {
+  const p = projects.find((x) => x.id === id);
+
+  pageTitle.textContent = "作品詳細";
+  pageHint.textContent = "提示：可分享此頁面網址（hash route）。";
+
+  if (!p) {
+    routeRoot.innerHTML = `<div class="empty">
+      <div class="title">找不到作品</div>
+      <div class="desc">可能作品已刪除或尚未載入完成。</div>
+      <div style="margin-top:10px;">
+        <button class="btn ghost" id="backBtn">← 返回作品列表</button>
+      </div>
+    </div>`;
+    routeRoot.querySelector("#backBtn")?.addEventListener("click", () => navigate("#/"));
+    setMeta({ title: "找不到作品 - 工程師作品集", description: "作品不存在或已移除。" });
+    return;
+  }
+
+  const title = p.title || "作品";
+  const desc = (p.description || "").slice(0, 80) || "作品詳細介紹";
+  setMeta({ title: `${title} - ${profile.name || "作品集"}`, description: desc });
+
+  const thumb = p.thumb || defaultThumb(title);
+  const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+  const views = Number(p.views || 0);
+
+  const tagsHtml = (p.tags && p.tags.length) ? `
+    <div class="tags" style="margin-top:10px;">
+      ${p.tags.map(t => `<span class="chip">#${escapeHtml(t)}</span>`).join("")}
+    </div>
+  ` : ``;
+
+  routeRoot.innerHTML = `
+    <div class="detail">
+      <div class="detail-card">
+        <button class="btn ghost" id="backBtn">← 返回作品列表</button>
+
+        <div class="detail-title">${escapeHtml(title)}</div>
+
+        <div class="thumb" style="margin-top:10px;">
+          <img src="${thumb}" alt="${escapeHtml(title)}" />
+        </div>
+
+        <div class="kv">
+          <div class="chip">更新：${escapeHtml(updated)}</div>
+          ${isAdmin ? `<div class="chip">👁 ${views}</div>` : ``}
+        </div>
+
+        ${tagsHtml}
+
+        <h3 style="margin-top:12px;">作品介紹</h3>
+        <div class="muted" style="line-height:1.6;">
+          ${p.description ? escapeHtml(p.description).replaceAll("\n","<br/>") : "（尚未填寫作品介紹）"}
+        </div>
+
+        <h3 style="margin-top:12px;">AI Prompt</h3>
+        <div class="pre">${p.prompt ? escapeHtml(p.prompt) : "（尚未填寫 prompt）"}</div>
+      </div>
+
+      <div class="detail-card">
+        <h3>快速操作</h3>
+
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <a class="btn" id="openLink" href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">🔗 開啟作品連結</a>
+          <button class="btn ghost" id="copyLink">📎 複製此頁網址</button>
+          ${isAdmin ? `<button class="btn ghost" id="editBtn">✏️ 編輯此作品</button>` : ``}
+        </div>
+
+        <div class="muted mini" style="margin-top:10px;">
+          views 會在你點「開啟作品連結」時累加（只有管理員看得到）。
+        </div>
+      </div>
+    </div>
+  `;
+
+  routeRoot.querySelector("#backBtn")?.addEventListener("click", () => navigate("#/"));
+
+  routeRoot.querySelector("#copyLink")?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert("已複製！");
+    } catch {
+      alert("複製失敗（可能瀏覽器限制）");
+    }
+  });
+
+  routeRoot.querySelector("#openLink")?.addEventListener("click", async () => {
+    if (!gatePassed) return;
+    try {
+      await updateDoc(doc(db, "projects", id), { views: increment(1) });
+    } catch (err) {
+      console.error("views increment failed", err);
+    }
+  });
+
+  routeRoot.querySelector("#editBtn")?.addEventListener("click", () => {
+    if (!gatePassed) return;
+    if (!isAdmin) return;
+
+    modalTitle.textContent = "編輯作品";
+    projectForm.id.value = p.id;
+    projectForm.title.value = p.title || "";
+    projectForm.url.value = p.url || "";
+    projectForm.description.value = p.description || "";
+    projectForm.prompt.value = p.prompt || "";
+    projectForm.thumb.value = (p.thumb && !String(p.thumb).startsWith("data:image")) ? p.thumb : "";
+    projectForm.tags.value = (p.tags || []).join(", ");
+    modalProject.showModal();
+  });
+}
+
+/* =========================
+   Stats
+========================= */
+function updateStats(list) {
+  projectCount.textContent = String(list.length);
+
+  let latest = null;
+  for (const p of list) {
+    if (!p.updatedAt) continue;
+    if (!latest) latest = p.updatedAt;
+    else if ((p.updatedAt.seconds || 0) > (latest.seconds || 0)) latest = p.updatedAt;
+  }
+  lastUpdated.textContent = latest ? fmtDate(latest) : "—";
+}
