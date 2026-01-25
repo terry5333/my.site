@@ -8,8 +8,11 @@
   <meta name="description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
   <meta name="robots" content="index,follow" />
 
-  <!-- ✅ favicon（.ico） -->
-  <link rel="icon" href="/favicon.ico" />
+  <!-- ======================
+       ✅ favicon（.ico，強制破快取）
+       檔案位置：public/favicon.ico
+  ======================= -->
+  <link rel="icon" href="/favicon.ico?v=2" />
 
   <!-- Open Graph -->
   <meta property="og:title" content="工程師作品集" />
@@ -55,13 +58,14 @@
         <div class="hero-title">
           <p class="badge">工程師 · Vibe Coding</p>
           <h1 id="name">我的作品集</h1>
-          <p class="muted" id="tagline">LINE Bot / 校園系統 / 各種快速原型與自動化。</p>
+          <p class="muted" id="tagline">
+            LINE Bot / 校園系統 / 各種快速原型與自動化。
+          </p>
         </div>
 
         <div class="hero-actions">
           <button class="btn ghost" id="btnLogin">Google 登入</button>
           <button class="btn ghost" id="btnLogout" hidden>登出</button>
-
           <button class="btn ghost" id="btnEditProfile" hidden>編輯個人資料</button>
           <button class="btn" id="btnAdd" hidden>＋ 新增作品</button>
         </div>
@@ -77,7 +81,7 @@
           <div class="stat-label">最後更新</div>
         </div>
         <div class="hint muted" id="authHint">
-          訪客模式：只能瀏覽。登入後可新增/編輯/刪除。
+          訪客模式：只能瀏覽。登入後可新增 / 編輯 / 刪除。
         </div>
       </div>
     </section>
