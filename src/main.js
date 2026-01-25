@@ -12,35 +12,31 @@ import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 const ADMIN_UID = import.meta.env.VITE_ADMIN_UID || "";
 const $ = (s) => document.querySelector(s);
 
-/** ===== Gate DOM (Turnstile) ===== */
-const gate = document.querySelector("#gate");
-const gateMsg = document.querySelector("#gateMsg");
+/** ===== Gate (Turnstile) ===== */
+const gate = $("#gate");
+const gateMsg = $("#gateMsg");
 let gatePassed = false;
 
-/** Gate control */
 function unlockSite() {
   gatePassed = true;
-  if (gate) gate.style.display = "none";
+  gate?.classList.add("is-hidden");
 }
 function lockSite(msg = "") {
   gatePassed = false;
-  if (gate) gate.style.display = "grid";
+  gate?.classList.remove("is-hidden");
   if (gateMsg) gateMsg.textContent = msg;
 }
 
-/** ✅ 預設：先鎖住 */
-lockSite("");
+// Turnstile needs global functions
+function onTurnstileSuccess() { unlockSite(); }
+function onTurnstileExpired() { lockSite("驗證已過期，請重新驗證。"); }
+function onTurnstileError() { lockSite("驗證發生錯誤，請重整頁面或稍後再試。"); }
 
-/** ✅ Turnstile callbacks (global) */
-window.onTurnstileSuccess = () => {
-  unlockSite();
-};
-window.onTurnstileExpired = () => {
-  lockSite("驗證已過期，請重新驗證。");
-};
-window.onTurnstileError = () => {
-  lockSite("驗證發生錯誤，請重整頁面或稍後再試。");
-};
+window.onTurnstileSuccess = onTurnstileSuccess;
+window.onTurnstileExpired = onTurnstileExpired;
+window.onTurnstileError = onTurnstileError;
+
+lockSite("");
 
 /** ===== DOM ===== */
 const btnLogin = $("#btnLogin");
@@ -54,7 +50,8 @@ const lastUpdated = $("#lastUpdated");
 
 const searchInput = $("#search");
 const sortSelect = $("#sort");
-const projectGrid = $("#projectGrid");
+const routeRoot = $("#routeRoot");
+const listToolbar = $("#listToolbar");
 
 const modalProject = $("#modalProject");
 const projectForm = $("#projectForm");
@@ -71,6 +68,8 @@ const nameEl = $("#name");
 const taglineEl = $("#tagline");
 const aboutEl = $("#aboutText");
 const socialList = $("#socialList");
+const pageTitle = $("#pageTitle");
+const pageHint = $("#pageHint");
 
 /** ===== State ===== */
 let isAdmin = false;
@@ -85,6 +84,8 @@ let profile = {
   instagram: "",
   email: "",
 };
+
+let loadingProjects = true;
 
 /** ===== Helpers ===== */
 function escapeHtml(str = "") {
@@ -123,6 +124,42 @@ function defaultThumb(title = "Project") {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function setMeta({ title, description }) {
+  document.title = title || "工程師作品集";
+  const d = document.querySelector('meta[name="description"]');
+  if (d && description) d.setAttribute("content", description);
+
+  const ogt = document.querySelector('meta[property="og:title"]');
+  const ogd = document.querySelector('meta[property="og:description"]');
+  const twt = document.querySelector('meta[name="twitter:title"]');
+  const twd = document.querySelector('meta[name="twitter:description"]');
+
+  if (ogt && title) ogt.setAttribute("content", title);
+  if (twt && title) twt.setAttribute("content", title);
+  if (ogd && description) ogd.setAttribute("content", description);
+  if (twd && description) twd.setAttribute("content", description);
+}
+
+function navigate(hash) {
+  window.location.hash = hash;
+}
+
+function getRoute() {
+  const h = window.location.hash || "#/";
+  // #/project/<id>
+  const m = h.match(/^#\/project\/(.+)$/);
+  if (m) return { name: "project", id: m[1] };
+  return { name: "home" };
+}
+
+function renderSkeleton() {
+  routeRoot.innerHTML = `
+    <div class="skeleton-grid">
+      ${Array.from({ length: 6 }).map(() => `<div class="skeleton"></div>`).join("")}
+    </div>
+  `;
+}
+
 /** ===== Auth ===== */
 btnLogin.addEventListener("click", async () => {
   if (!gatePassed) return;
@@ -158,7 +195,7 @@ onAuthStateChanged(auth, (user) => {
     ? `管理員模式：你已登入，可新增/編輯/刪除（UID：${user.uid.slice(0, 8)}...)`
     : (user ? "你已登入，但不是管理員（只能瀏覽）。" : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。");
 
-  renderProjects(getFilteredSorted());
+  renderRoute();
 });
 
 /** ===== Firestore refs ===== */
@@ -166,7 +203,7 @@ const projectsCol = collection(db, "projects");
 const profileDocRef = doc(db, "site", "profile");
 
 /** ===== Ensure profile doc exists ===== */
-async function ensureProfileDoc() {
+(async function ensureProfileDoc() {
   try {
     const snap = await getDoc(profileDocRef);
     if (!snap.exists()) {
@@ -175,8 +212,7 @@ async function ensureProfileDoc() {
   } catch (err) {
     console.error(err);
   }
-}
-ensureProfileDoc();
+})();
 
 /** ===== Profile listener ===== */
 onSnapshot(profileDocRef, (snap) => {
@@ -255,16 +291,23 @@ profileForm.addEventListener("submit", async (e) => {
 
 /** ===== Projects listener ===== */
 const q = query(projectsCol, orderBy("updatedAt", "desc"));
+renderSkeleton();
+
 onSnapshot(q, (snap) => {
+  loadingProjects = false;
   projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  renderProjects(getFilteredSorted());
   updateStats(projects);
+  renderRoute();
 }, (err) => {
   console.error(err);
-  projectGrid.innerHTML = `<div class="muted">讀取作品失敗：${escapeHtml(err.code || err.message)}</div>`;
+  loadingProjects = false;
+  routeRoot.innerHTML = `<div class="empty">
+    <div class="title">讀取作品失敗</div>
+    <div class="desc">${escapeHtml(err.code || err.message)}</div>
+  </div>`;
 });
 
-/** ===== Project modal close/cancel ===== */
+/** ===== Project modal ===== */
 btnCloseProject.addEventListener("click", () => modalProject.close());
 btnCancelProject.addEventListener("click", () => modalProject.close());
 
@@ -278,7 +321,6 @@ btnAdd.addEventListener("click", () => {
   modalProject.showModal();
 });
 
-/** ===== Submit create/edit ===== */
 projectForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!gatePassed) return;
@@ -305,7 +347,6 @@ projectForm.addEventListener("submit", async (e) => {
         updatedAt: serverTimestamp(),
       });
     }
-
     modalProject.close();
   } catch (err) {
     console.error(err);
@@ -339,74 +380,87 @@ function getFilteredSorted() {
   return list;
 }
 
-searchInput?.addEventListener("input", () => renderProjects(getFilteredSorted()));
-sortSelect?.addEventListener("change", () => renderProjects(getFilteredSorted()));
+searchInput?.addEventListener("input", () => renderRoute());
+sortSelect?.addEventListener("change", () => renderRoute());
 
-/** ===== Render projects (views only admin) ===== */
+/** ===== Routing ===== */
+window.addEventListener("hashchange", () => renderRoute());
+
+function renderRoute() {
+  const r = getRoute();
+
+  if (r.name === "home") {
+    pageTitle.textContent = "作品列表";
+    pageHint.textContent = "提示：點作品卡片可進入詳細頁；縮圖可用圖片網址。";
+    listToolbar.style.display = "";
+    setMeta({
+      title: `${profile.name || "工程師作品集"}`,
+      description: profile.tagline || "作品集網站"
+    });
+
+    if (loadingProjects) return renderSkeleton();
+    return renderProjects(getFilteredSorted());
+  }
+
+  if (r.name === "project") {
+    listToolbar.style.display = "none";
+    return renderProjectDetail(r.id);
+  }
+}
+
 function renderProjects(list) {
   if (!list.length) {
-    projectGrid.innerHTML = `<div class="muted">目前沒有作品，${isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"}</div>`;
+    routeRoot.innerHTML = `<div class="empty">
+      <div class="title">目前沒有作品</div>
+      <div class="desc">${isAdmin ? "點右上角新增一個作品吧。" : "等待管理員新增作品後就會出現。"}</div>
+    </div>`;
     return;
   }
 
-  projectGrid.innerHTML = list.map((p, i) => {
-    const thumb = p.thumb || defaultThumb(p.title || "Project");
-    const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
-    const delay = Math.min(i * 60, 360);
-
-    return `
-      <div class="project" style="animation-delay:${delay}ms">
-        <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
-
-        <h3>${escapeHtml(p.title || "")}</h3>
-        <div class="muted" style="font-size:13px; line-height:1.5;">
-          ${p.description ? escapeHtml(p.description) : "（尚未填寫作品介紹）"}
-        </div>
-
-        <div style="margin-top:10px;">
-          <a class="open-link" data-id="${p.id}" href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">
-            🔗 開啟作品連結
-          </a>
-        </div>
-
-        <details style="margin-top:10px;">
-          <summary class="muted" style="cursor:pointer;">查看 AI Prompt</summary>
-          <div class="muted" style="white-space:pre-wrap; margin-top:8px; font-size:13px; line-height:1.5;">
-            ${p.prompt ? escapeHtml(p.prompt) : "（尚未填寫 prompt）"}
-          </div>
-        </details>
-
-        <div class="meta">
-          <div class="chip">更新：${escapeHtml(updated)}</div>
-          ${isAdmin ? `<div class="chip">👁 ${Number(p.views || 0)}</div>` : ``}
-
-          ${isAdmin ? `
-            <div class="actions">
-              <button class="link-btn" data-act="edit" data-id="${p.id}">編輯</button>
-              <button class="link-btn" data-act="del" data-id="${p.id}">刪除</button>
+  routeRoot.innerHTML = `
+    <div class="grid" id="projectGrid">
+      ${list.map((p, i) => {
+        const thumb = p.thumb || defaultThumb(p.title || "Project");
+        const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+        const delay = Math.min(i * 60, 360);
+        return `
+          <div class="project" data-id="${p.id}" style="animation-delay:${delay}ms">
+            <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
+            <h3>${escapeHtml(p.title || "")}</h3>
+            <div class="muted" style="font-size:13px; line-height:1.5;">
+              ${p.description ? escapeHtml(p.description) : "（尚未填寫作品介紹）"}
             </div>
-          ` : `<div></div>`}
-        </div>
-      </div>
-    `;
-  }).join("");
+            <div class="meta">
+              <div class="chip">更新：${escapeHtml(updated)}</div>
+              ${isAdmin ? `<div class="chip">👁 ${Number(p.views || 0)}</div>` : ``}
+              ${isAdmin ? `
+                <div class="actions">
+                  <button class="link-btn" data-act="edit" data-id="${p.id}">編輯</button>
+                  <button class="link-btn" data-act="del" data-id="${p.id}">刪除</button>
+                </div>
+              ` : `<div></div>`}
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 
-  // ✅ views +1（不擋跳轉）
-  projectGrid.querySelectorAll("a.open-link").forEach((a) => {
-    a.addEventListener("click", async () => {
-      if (!gatePassed) return;
-      const id = a.dataset.id;
-      try {
-        await updateDoc(doc(db, "projects", id), { views: increment(1) });
-      } catch (err) {
-        console.error("views increment failed", err);
-      }
+  const grid = routeRoot.querySelector("#projectGrid");
+
+  // 點卡片進詳細頁（但點編輯/刪除不跳）
+  grid.querySelectorAll(".project").forEach((card) => {
+    card.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (btn) return;
+      navigate(`#/project/${card.dataset.id}`);
     });
   });
 
   // 編輯/刪除
-  projectGrid.querySelectorAll("button[data-act]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+  grid.querySelectorAll("button[data-act]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
       if (!gatePassed) return;
       if (!isAdmin) return;
 
@@ -437,6 +491,110 @@ function renderProjects(list) {
         }
       }
     });
+  });
+}
+
+function renderProjectDetail(id) {
+  const p = projects.find((x) => x.id === id);
+  pageTitle.textContent = "作品詳細";
+  pageHint.textContent = "提示：可分享此頁面網址（hash route）。";
+
+  if (!p) {
+    routeRoot.innerHTML = `<div class="empty">
+      <div class="title">找不到作品</div>
+      <div class="desc">可能作品已刪除或尚未載入完成。</div>
+      <div style="margin-top:10px;">
+        <button class="btn ghost" id="backBtn">← 返回作品列表</button>
+      </div>
+    </div>`;
+    routeRoot.querySelector("#backBtn")?.addEventListener("click", () => navigate("#/"));
+    setMeta({ title: "找不到作品 - 工程師作品集", description: "作品不存在或已移除。" });
+    return;
+  }
+
+  const title = p.title || "作品";
+  const desc = (p.description || "").slice(0, 80) || "作品詳細介紹";
+  setMeta({ title: `${title} - ${profile.name || "作品集"}`, description: desc });
+
+  const thumb = p.thumb || defaultThumb(title);
+  const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+  const views = Number(p.views || 0);
+
+  routeRoot.innerHTML = `
+    <div class="detail">
+      <div class="detail-card">
+        <button class="btn ghost" id="backBtn">← 返回作品列表</button>
+
+        <div class="detail-title">${escapeHtml(title)}</div>
+
+        <div class="thumb" style="margin-top:10px;">
+          <img src="${thumb}" alt="${escapeHtml(title)}" />
+        </div>
+
+        <div class="kv">
+          <div class="chip">更新：${escapeHtml(updated)}</div>
+          ${isAdmin ? `<div class="chip">👁 ${views}</div>` : ``}
+        </div>
+
+        <h3 style="margin-top:12px;">作品介紹</h3>
+        <div class="muted" style="line-height:1.6;">
+          ${p.description ? escapeHtml(p.description).replaceAll("\n","<br/>") : "（尚未填寫作品介紹）"}
+        </div>
+
+        <h3 style="margin-top:12px;">AI Prompt</h3>
+        <div class="pre">${p.prompt ? escapeHtml(p.prompt) : "（尚未填寫 prompt）"}</div>
+      </div>
+
+      <div class="detail-card">
+        <h3>快速操作</h3>
+
+        <div style="display:grid; gap:10px; margin-top:10px;">
+          <a class="btn" id="openLink" href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">🔗 開啟作品連結</a>
+          <button class="btn ghost" id="copyLink">📎 複製此頁網址</button>
+          ${isAdmin ? `<button class="btn ghost" id="editBtn">✏️ 編輯此作品</button>` : ``}
+        </div>
+
+        <div class="muted mini" style="margin-top:10px;">
+          views 會在你點「開啟作品連結」時累加。
+        </div>
+      </div>
+    </div>
+  `;
+
+  routeRoot.querySelector("#backBtn")?.addEventListener("click", () => navigate("#/"));
+
+  routeRoot.querySelector("#copyLink")?.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert("已複製！");
+    } catch {
+      alert("複製失敗（可能瀏覽器限制）");
+    }
+  });
+
+  // 點外連 views+1（不擋跳轉）
+  routeRoot.querySelector("#openLink")?.addEventListener("click", async () => {
+    if (!gatePassed) return;
+    try {
+      await updateDoc(doc(db, "projects", id), { views: increment(1) });
+    } catch (err) {
+      console.error("views increment failed", err);
+    }
+  });
+
+  // 管理員編輯
+  routeRoot.querySelector("#editBtn")?.addEventListener("click", () => {
+    if (!gatePassed) return;
+    if (!isAdmin) return;
+
+    modalTitle.textContent = "編輯作品";
+    projectForm.id.value = p.id;
+    projectForm.title.value = p.title || "";
+    projectForm.url.value = p.url || "";
+    projectForm.description.value = p.description || "";
+    projectForm.prompt.value = p.prompt || "";
+    projectForm.thumb.value = (p.thumb && !String(p.thumb).startsWith("data:image")) ? p.thumb : "";
+    modalProject.showModal();
   });
 }
 
