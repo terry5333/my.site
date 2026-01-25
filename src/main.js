@@ -2,17 +2,9 @@ import "./styles.css";
 import { db, auth, googleProvider } from "./firebase";
 
 import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp,
-  setDoc,
-  getDoc,
+  collection, addDoc, updateDoc, deleteDoc, doc,
+  onSnapshot, query, orderBy, serverTimestamp, setDoc, getDoc,
+  increment
 } from "firebase/firestore";
 
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
@@ -78,9 +70,7 @@ function fmtDate(ts) {
   if (!ts) return "—";
   const d = ts.toDate ? ts.toDate() : new Date(ts);
   const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function defaultThumb(title = "Project") {
@@ -106,7 +96,6 @@ function defaultThumb(title = "Project") {
 /** ===== Auth ===== */
 btnLogin.addEventListener("click", async () => {
   try {
-    console.log("login clicked");
     await signInWithPopup(auth, googleProvider);
   } catch (err) {
     console.error(err);
@@ -135,9 +124,7 @@ onAuthStateChanged(auth, (user) => {
 
   authHint.textContent = isAdmin
     ? `管理員模式：你已登入，可新增/編輯/刪除（UID：${user.uid.slice(0, 8)}...)`
-    : user
-    ? "你已登入，但不是管理員（只能瀏覽）。"
-    : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。";
+    : (user ? "你已登入，但不是管理員（只能瀏覽）。" : "訪客模式：只能瀏覽。登入後可新增/編輯/刪除。");
 
   renderProjects(getFilteredSorted());
 });
@@ -151,31 +138,20 @@ async function ensureProfileDoc() {
   try {
     const snap = await getDoc(profileDocRef);
     if (!snap.exists()) {
-      await setDoc(profileDocRef, {
-        ...profile,
-        updatedAt: serverTimestamp(),
-      });
+      await setDoc(profileDocRef, { ...profile, updatedAt: serverTimestamp() });
     }
   } catch (err) {
     console.error(err);
-    // 如果 rules 還沒放行，可能會失敗；不擋頁面
   }
 }
 ensureProfileDoc();
 
 /** ===== Profile listener ===== */
-onSnapshot(
-  profileDocRef,
-  (snap) => {
-    if (!snap.exists()) return;
-    profile = { ...profile, ...snap.data() };
-    renderProfile(profile);
-  },
-  (err) => {
-    console.error(err);
-    // profile 讀不到也不擋主頁
-  }
-);
+onSnapshot(profileDocRef, (snap) => {
+  if (!snap.exists()) return;
+  profile = { ...profile, ...snap.data() };
+  renderProfile(profile);
+}, (err) => console.error(err));
 
 function renderProfile(p) {
   nameEl.textContent = p.name || "我的作品集";
@@ -194,23 +170,17 @@ function renderProfile(p) {
     return;
   }
 
-  socialList.innerHTML = items
-    .map(([label, url]) => {
-      const safeUrl = escapeHtml(url);
-      return `
-      <div class="social-item">
-        <div class="muted">${label}</div>
-        <a href="${safeUrl}" target="_blank" rel="noreferrer">前往</a>
-      </div>
-    `;
-    })
-    .join("");
+  socialList.innerHTML = items.map(([label, url]) => `
+    <div class="social-item">
+      <div class="muted">${escapeHtml(label)}</div>
+      <a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">前往</a>
+    </div>
+  `).join("");
 }
 
 /** ===== Edit profile ===== */
 btnEditProfile.addEventListener("click", () => {
   if (!isAdmin) return;
-
   profileForm.name.value = profile.name || "";
   profileForm.tagline.value = profile.tagline || "";
   profileForm.about.value = profile.about || "";
@@ -218,7 +188,6 @@ btnEditProfile.addEventListener("click", () => {
   profileForm.linkedin.value = profile.linkedin || "";
   profileForm.instagram.value = profile.instagram || "";
   profileForm.email.value = profile.email || "";
-
   modalProfile.showModal();
 });
 
@@ -230,20 +199,16 @@ profileForm.addEventListener("submit", async (e) => {
   if (!isAdmin) return;
 
   try {
-    await setDoc(
-      profileDocRef,
-      {
-        name: profileForm.name.value.trim(),
-        tagline: profileForm.tagline.value.trim(),
-        about: profileForm.about.value.trim(),
-        github: profileForm.github.value.trim(),
-        linkedin: profileForm.linkedin.value.trim(),
-        instagram: profileForm.instagram.value.trim(),
-        email: profileForm.email.value.trim(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    await setDoc(profileDocRef, {
+      name: profileForm.name.value.trim(),
+      tagline: profileForm.tagline.value.trim(),
+      about: profileForm.about.value.trim(),
+      github: profileForm.github.value.trim(),
+      linkedin: profileForm.linkedin.value.trim(),
+      instagram: profileForm.instagram.value.trim(),
+      email: profileForm.email.value.trim(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
 
     modalProfile.close();
   } catch (err) {
@@ -254,38 +219,42 @@ profileForm.addEventListener("submit", async (e) => {
 
 /** ===== Projects listener ===== */
 const q = query(projectsCol, orderBy("updatedAt", "desc"));
-onSnapshot(
-  q,
-  (snap) => {
-    projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    renderProjects(getFilteredSorted());
-    updateStats(projects);
-  },
-  (err) => {
-    console.error(err);
-    projectGrid.innerHTML = `<div class="muted">讀取作品失敗：${escapeHtml(
-      err.code || err.message
-    )}</div>`;
-  }
-);
+onSnapshot(q, (snap) => {
+  projects = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  renderProjects(getFilteredSorted());
+  updateStats(projects);
+}, (err) => {
+  console.error(err);
+  projectGrid.innerHTML = `<div class="muted">讀取作品失敗：${escapeHtml(err.code || err.message)}</div>`;
+});
 
-/** ===== Project modal close/cancel fix ===== */
+/** ===== Project modal close/cancel ===== */
 btnCloseProject.addEventListener("click", () => modalProject.close());
 btnCancelProject.addEventListener("click", () => modalProject.close());
 
-/** ===== Add project ===== */
 btnAdd.addEventListener("click", () => {
   if (!isAdmin) return;
   modalTitle.textContent = "新增作品";
   projectForm.reset();
   projectForm.id.value = "";
   modalProject.showModal();
+
+  // Turnstile 可能需要重新渲染（通常不用，但加了也不會壞）
+  // 若你發現 widget 不出現，可以重整頁面即可
 });
 
-/** ===== Submit create/edit ===== */
+/** ===== Submit create/edit (Turnstile gate) ===== */
 projectForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!isAdmin) return;
+
+  // ✅ Turnstile token（前端門檻）
+  const ts = projectForm.querySelector('input[name="cf-turnstile-response"]');
+  const token = ts?.value?.trim();
+  if (!token) {
+    alert("請先通過 Turnstile 驗證再送出。");
+    return;
+  }
 
   const id = projectForm.id.value.trim();
   const title = projectForm.title.value.trim();
@@ -297,21 +266,14 @@ projectForm.addEventListener("submit", async (e) => {
   try {
     if (!id) {
       await addDoc(projectsCol, {
-        title,
-        url,
-        description,
-        prompt,
-        thumb,
+        title, url, description, prompt, thumb,
+        views: 0, // ✅ 新增作品預設瀏覽數
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     } else {
       await updateDoc(doc(db, "projects", id), {
-        title,
-        url,
-        description,
-        prompt,
-        thumb,
+        title, url, description, prompt, thumb,
         updatedAt: serverTimestamp(),
       });
     }
@@ -329,72 +291,55 @@ function getFilteredSorted() {
   let list = [...projects];
 
   if (term) {
-    list = list.filter(
-      (p) =>
-        (p.title || "").toLowerCase().includes(term) ||
-        (p.description || "").toLowerCase().includes(term) ||
-        (p.prompt || "").toLowerCase().includes(term)
+    list = list.filter((p) =>
+      (p.title || "").toLowerCase().includes(term) ||
+      (p.description || "").toLowerCase().includes(term) ||
+      (p.prompt || "").toLowerCase().includes(term)
     );
   }
 
   const sort = sortSelect?.value || "updated_desc";
   if (sort === "updated_asc") {
-    list.sort(
-      (a, b) => (a.updatedAt?.seconds || 0) - (b.updatedAt?.seconds || 0)
-    );
+    list.sort((a, b) => (a.updatedAt?.seconds || 0) - (b.updatedAt?.seconds || 0));
   } else if (sort === "name_asc") {
     list.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
   } else if (sort === "name_desc") {
     list.sort((a, b) => (b.title || "").localeCompare(a.title || ""));
   } else {
-    list.sort(
-      (a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0)
-    );
+    list.sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
   }
-
   return list;
 }
 
-searchInput?.addEventListener("input", () =>
-  renderProjects(getFilteredSorted())
-);
-sortSelect?.addEventListener("change", () =>
-  renderProjects(getFilteredSorted())
-);
+searchInput?.addEventListener("input", () => renderProjects(getFilteredSorted()));
+sortSelect?.addEventListener("change", () => renderProjects(getFilteredSorted()));
 
-/** ===== Render projects ===== */
+/** ===== Render projects (views only admin) ===== */
 function renderProjects(list) {
   if (!list.length) {
-    projectGrid.innerHTML = `<div class="muted">目前沒有作品，${
-      isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"
-    }</div>`;
+    projectGrid.innerHTML = `<div class="muted">目前沒有作品，${isAdmin ? "點右上角新增一個吧。" : "等管理員新增作品後就會出現。"}</div>`;
     return;
   }
 
-  projectGrid.innerHTML = list
-    .map((p, i) => {
-      const thumb = p.thumb || defaultThumb(p.title || "Project");
-      const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
-      const delay = Math.min(i * 60, 360);
+  projectGrid.innerHTML = list.map((p, i) => {
+    const thumb = p.thumb || defaultThumb(p.title || "Project");
+    const updated = p.updatedAt ? fmtDate(p.updatedAt) : "—";
+    const delay = Math.min(i * 60, 360);
 
-      return `
+    return `
       <div class="project" style="animation-delay:${delay}ms">
-        <div class="thumb">
-          <img src="${thumb}" alt="${escapeHtml(p.title || "")}">
-        </div>
+        <div class="thumb"><img src="${thumb}" alt="${escapeHtml(p.title || "")}"></div>
 
         <h3>${escapeHtml(p.title || "")}</h3>
-
         <div class="muted" style="font-size:13px; line-height:1.5;">
-          ${
-            p.description
-              ? escapeHtml(p.description)
-              : "（尚未填寫作品介紹）"
-          }
+          ${p.description ? escapeHtml(p.description) : "（尚未填寫作品介紹）"}
         </div>
 
         <div style="margin-top:10px;">
-          <a href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">🔗 開啟作品連結</a>
+          <!-- ✅ 點擊連結會 views +1 -->
+          <a class="open-link" data-id="${p.id}" href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">
+            🔗 開啟作品連結
+          </a>
         </div>
 
         <details style="margin-top:10px;">
@@ -406,23 +351,32 @@ function renderProjects(list) {
 
         <div class="meta">
           <div class="chip">更新：${escapeHtml(updated)}</div>
+          ${isAdmin ? `<div class="chip">👁 ${Number(p.views || 0)}</div>` : ``}
 
-          ${
-            isAdmin
-              ? `
+          ${isAdmin ? `
             <div class="actions">
               <button class="link-btn" data-act="edit" data-id="${p.id}">編輯</button>
               <button class="link-btn" data-act="del" data-id="${p.id}">刪除</button>
             </div>
-          `
-              : `<div></div>`
-          }
+          ` : `<div></div>`}
         </div>
       </div>
     `;
-    })
-    .join("");
+  }).join("");
 
+  // ✅ views +1（不擋跳轉）
+  projectGrid.querySelectorAll("a.open-link").forEach((a) => {
+    a.addEventListener("click", async () => {
+      const id = a.dataset.id;
+      try {
+        await updateDoc(doc(db, "projects", id), { views: increment(1) });
+      } catch (err) {
+        console.error("views increment failed", err);
+      }
+    });
+  });
+
+  // 編輯/刪除
   projectGrid.querySelectorAll("button[data-act]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!isAdmin) return;
@@ -438,17 +392,13 @@ function renderProjects(list) {
         projectForm.url.value = item.url || "";
         projectForm.description.value = item.description || "";
         projectForm.prompt.value = item.prompt || "";
-        projectForm.thumb.value =
-          item.thumb && !String(item.thumb).startsWith("data:image")
-            ? item.thumb
-            : "";
+        projectForm.thumb.value = (item.thumb && !String(item.thumb).startsWith("data:image")) ? item.thumb : "";
         modalProject.showModal();
       }
 
       if (act === "del") {
         const ok = confirm(`確定要刪除「${item.title || "這個作品"}」？`);
         if (!ok) return;
-
         try {
           await deleteDoc(doc(db, "projects", id));
         } catch (err) {
@@ -467,8 +417,7 @@ function updateStats(list) {
   for (const p of list) {
     if (!p.updatedAt) continue;
     if (!latest) latest = p.updatedAt;
-    else if ((p.updatedAt.seconds || 0) > (latest.seconds || 0))
-      latest = p.updatedAt;
+    else if ((p.updatedAt.seconds || 0) > (latest.seconds || 0)) latest = p.updatedAt;
   }
   lastUpdated.textContent = latest ? fmtDate(latest) : "—";
 }
