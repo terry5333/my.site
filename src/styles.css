@@ -72,6 +72,7 @@ h2{ margin:0 0 10px; font-size:18px; }
 h3{ margin:0; font-size:18px; }
 .muted{ color:var(--muted); }
 .mini{ margin:8px 0 0; font-size:13px; }
+a{ color:rgba(255,255,255,.92); }
 
 .badge{
   display:inline-block;
@@ -126,7 +127,7 @@ h3{ margin:0; font-size:18px; }
   border-radius:14px;
   cursor:pointer;
   font-weight:700;
-  transition: transform .12s ease, filter .2s ease, background .2s ease;
+  transition: transform .12s ease, filter .2s ease;
 }
 .btn:hover{ filter:brightness(1.08); transform: translateY(-1px); }
 .btn:active{ transform: translateY(0) scale(.98); }
@@ -175,10 +176,7 @@ h3{ margin:0; font-size:18px; }
   border:1px solid rgba(255,255,255,.10);
   background:rgba(255,255,255,.04);
 }
-.social-item a{
-  color:rgba(255,255,255,.92);
-  text-decoration:none;
-}
+.social-item a{ text-decoration:none; }
 .social-item a:hover{ text-decoration:underline; }
 
 .row-between{
@@ -189,7 +187,7 @@ h3{ margin:0; font-size:18px; }
   flex-wrap:wrap;
 }
 
-/* ✅ 修正搜尋框溢出 */
+/* ✅ 修正搜尋框不溢出 */
 .right-tools{
   display:flex;
   gap:10px;
@@ -198,7 +196,6 @@ h3{ margin:0; font-size:18px; }
   width:100%;
   min-width:0;
 }
-
 .input,.select,.textarea{
   border:1px solid rgba(255,255,255,.14);
   background:rgba(0,0,0,.18);
@@ -206,10 +203,9 @@ h3{ margin:0; font-size:18px; }
   border-radius:14px;
   padding:10px 12px;
   outline:none;
-  transition: border-color .2s ease, transform .12s ease;
+  transition: border-color .2s ease;
 }
 .input:focus,.select:focus,.textarea:focus{ border-color: rgba(207,152,147,.6); }
-
 .input{
   flex:1 1 220px;
   min-width:0;
@@ -219,7 +215,6 @@ h3{ margin:0; font-size:18px; }
   flex:0 0 auto;
   min-width:160px;
 }
-
 @media (max-width: 640px){
   .right-tools{ flex-direction:column; align-items:stretch; }
   .select{ width:100%; }
@@ -246,6 +241,7 @@ h3{ margin:0; font-size:18px; }
   overflow:hidden;
   transition: transform .18s ease, filter .2s ease;
   animation: cardIn .45s ease both;
+  cursor:pointer;
 }
 .project:hover{ transform: translateY(-4px); filter: brightness(1.05); }
 
@@ -267,7 +263,7 @@ h3{ margin:0; font-size:18px; }
 .project:hover .thumb img{ transform: scale(1.07); }
 
 .project h3{ margin:8px 0 6px; font-size:16px; }
-.project a{ color:rgba(255,255,255,.92); text-decoration:none; }
+.project a{ text-decoration:none; }
 .project a:hover{ text-decoration:underline; }
 
 .meta{
@@ -299,6 +295,75 @@ h3{ margin:0; font-size:18px; }
 }
 .link-btn:hover{ filter:brightness(1.08); transform: translateY(-1px); }
 .link-btn:active{ transform: translateY(0) scale(.98); }
+
+/* ✅ Skeleton Loading */
+.skeleton-grid{
+  display:grid;
+  grid-template-columns:repeat(3, 1fr);
+  gap:14px;
+}
+@media (max-width: 980px){ .skeleton-grid{ grid-template-columns:repeat(2, 1fr); } }
+@media (max-width: 640px){ .skeleton-grid{ grid-template-columns:1fr; } }
+
+@keyframes shimmer{
+  0%{ background-position: 0% 0; }
+  100%{ background-position: 200% 0; }
+}
+.skeleton{
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,.10);
+  background:linear-gradient(90deg, rgba(255,255,255,.05), rgba(255,255,255,.10), rgba(255,255,255,.05));
+  background-size: 200% 100%;
+  animation: shimmer 1.1s linear infinite;
+  height: 260px;
+}
+
+/* ✅ Empty state */
+.empty{
+  padding:18px;
+  border-radius:18px;
+  border:1px dashed rgba(255,255,255,.16);
+  background:rgba(255,255,255,.03);
+}
+.empty .title{ font-weight:800; margin-bottom:6px; }
+.empty .desc{ color:var(--muted); font-size:13px; line-height:1.5; }
+
+/* ✅ Detail page */
+.detail{
+  display:grid;
+  grid-template-columns: 1.2fr .8fr;
+  gap:14px;
+}
+@media (max-width: 980px){ .detail{ grid-template-columns:1fr; } }
+
+.detail-card{
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,.10);
+  background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.03));
+  padding:14px;
+}
+.detail-title{
+  font-size:22px;
+  font-weight:900;
+  margin:6px 0 8px;
+}
+.kv{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:10px;
+}
+.kv .chip{ color:rgba(255,255,255,.78); }
+
+.pre{
+  white-space:pre-wrap;
+  line-height:1.6;
+  color:rgba(255,255,255,.78);
+  background:rgba(0,0,0,.18);
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:14px;
+  padding:12px;
+}
 
 /* Modal */
 .modal{
@@ -381,3 +446,4 @@ label span{
   font-size: 13px;
   line-height: 1.5;
 }
+.gate.is-hidden{ display:none !important; }
