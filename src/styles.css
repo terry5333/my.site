@@ -189,7 +189,7 @@ h3{ margin:0; font-size:18px; }
   flex-wrap:wrap;
 }
 
-/* ✅ 修正搜尋框溢出：讓工具列可縮放、不爆框 */
+/* ✅ 修正搜尋框溢出 */
 .right-tools{
   display:flex;
   gap:10px;
@@ -210,7 +210,6 @@ h3{ margin:0; font-size:18px; }
 }
 .input:focus,.select:focus,.textarea:focus{ border-color: rgba(207,152,147,.6); }
 
-/* ✅ input 不固定寬度，改 flex */
 .input{
   flex:1 1 220px;
   min-width:0;
@@ -354,11 +353,31 @@ label span{
   margin-top:12px;
 }
 
-/* ✅ Turnstile 外框 */
-.turnstile-wrap{
-  margin-top: 6px;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.03);
+/* ✅ Turnstile Gate */
+.gate{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,.65);
+  backdrop-filter: blur(6px);
+}
+.gate-card{
+  width: min(520px, calc(100vw - 28px));
+  border-radius: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: linear-gradient(180deg, rgba(59,59,88,.92), rgba(15,15,22,.94));
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+}
+.gate-title{
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.gate-sub{
+  margin-bottom: 12px;
+  font-size: 13px;
+  line-height: 1.5;
 }
