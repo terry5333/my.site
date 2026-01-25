@@ -12,6 +12,36 @@ import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 const ADMIN_UID = import.meta.env.VITE_ADMIN_UID || "";
 const $ = (s) => document.querySelector(s);
 
+/** ===== Gate DOM (Turnstile) ===== */
+const gate = document.querySelector("#gate");
+const gateMsg = document.querySelector("#gateMsg");
+let gatePassed = false;
+
+/** Gate control */
+function unlockSite() {
+  gatePassed = true;
+  if (gate) gate.style.display = "none";
+}
+function lockSite(msg = "") {
+  gatePassed = false;
+  if (gate) gate.style.display = "grid";
+  if (gateMsg) gateMsg.textContent = msg;
+}
+
+/** ✅ 預設：先鎖住 */
+lockSite("");
+
+/** ✅ Turnstile callbacks (global) */
+window.onTurnstileSuccess = () => {
+  unlockSite();
+};
+window.onTurnstileExpired = () => {
+  lockSite("驗證已過期，請重新驗證。");
+};
+window.onTurnstileError = () => {
+  lockSite("驗證發生錯誤，請重整頁面或稍後再試。");
+};
+
 /** ===== DOM ===== */
 const btnLogin = $("#btnLogin");
 const btnLogout = $("#btnLogout");
@@ -95,6 +125,7 @@ function defaultThumb(title = "Project") {
 
 /** ===== Auth ===== */
 btnLogin.addEventListener("click", async () => {
+  if (!gatePassed) return;
   try {
     await signInWithPopup(auth, googleProvider);
   } catch (err) {
@@ -104,6 +135,7 @@ btnLogin.addEventListener("click", async () => {
 });
 
 btnLogout.addEventListener("click", async () => {
+  if (!gatePassed) return;
   try {
     await signOut(auth);
   } catch (err) {
@@ -180,7 +212,9 @@ function renderProfile(p) {
 
 /** ===== Edit profile ===== */
 btnEditProfile.addEventListener("click", () => {
+  if (!gatePassed) return;
   if (!isAdmin) return;
+
   profileForm.name.value = profile.name || "";
   profileForm.tagline.value = profile.tagline || "";
   profileForm.about.value = profile.about || "";
@@ -188,6 +222,7 @@ btnEditProfile.addEventListener("click", () => {
   profileForm.linkedin.value = profile.linkedin || "";
   profileForm.instagram.value = profile.instagram || "";
   profileForm.email.value = profile.email || "";
+
   modalProfile.showModal();
 });
 
@@ -196,6 +231,7 @@ btnCancelProfile.addEventListener("click", () => modalProfile.close());
 
 profileForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!gatePassed) return;
   if (!isAdmin) return;
 
   try {
@@ -233,28 +269,20 @@ btnCloseProject.addEventListener("click", () => modalProject.close());
 btnCancelProject.addEventListener("click", () => modalProject.close());
 
 btnAdd.addEventListener("click", () => {
+  if (!gatePassed) return;
   if (!isAdmin) return;
+
   modalTitle.textContent = "新增作品";
   projectForm.reset();
   projectForm.id.value = "";
   modalProject.showModal();
-
-  // Turnstile 可能需要重新渲染（通常不用，但加了也不會壞）
-  // 若你發現 widget 不出現，可以重整頁面即可
 });
 
-/** ===== Submit create/edit (Turnstile gate) ===== */
+/** ===== Submit create/edit ===== */
 projectForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!gatePassed) return;
   if (!isAdmin) return;
-
-  // ✅ Turnstile token（前端門檻）
-  const ts = projectForm.querySelector('input[name="cf-turnstile-response"]');
-  const token = ts?.value?.trim();
-  if (!token) {
-    alert("請先通過 Turnstile 驗證再送出。");
-    return;
-  }
 
   const id = projectForm.id.value.trim();
   const title = projectForm.title.value.trim();
@@ -267,7 +295,7 @@ projectForm.addEventListener("submit", async (e) => {
     if (!id) {
       await addDoc(projectsCol, {
         title, url, description, prompt, thumb,
-        views: 0, // ✅ 新增作品預設瀏覽數
+        views: 0,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -336,7 +364,6 @@ function renderProjects(list) {
         </div>
 
         <div style="margin-top:10px;">
-          <!-- ✅ 點擊連結會 views +1 -->
           <a class="open-link" data-id="${p.id}" href="${escapeHtml(p.url || "")}" target="_blank" rel="noreferrer">
             🔗 開啟作品連結
           </a>
@@ -367,6 +394,7 @@ function renderProjects(list) {
   // ✅ views +1（不擋跳轉）
   projectGrid.querySelectorAll("a.open-link").forEach((a) => {
     a.addEventListener("click", async () => {
+      if (!gatePassed) return;
       const id = a.dataset.id;
       try {
         await updateDoc(doc(db, "projects", id), { views: increment(1) });
@@ -379,7 +407,9 @@ function renderProjects(list) {
   // 編輯/刪除
   projectGrid.querySelectorAll("button[data-act]").forEach((btn) => {
     btn.addEventListener("click", async () => {
+      if (!gatePassed) return;
       if (!isAdmin) return;
+
       const act = btn.dataset.act;
       const id = btn.dataset.id;
       const item = projects.find((x) => x.id === id);
