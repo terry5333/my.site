@@ -7,13 +7,11 @@
   <title>工程師作品集</title>
   <meta name="description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
   <meta name="robots" content="index,follow" />
-  <link rel="canonical" href="/" />
 
   <!-- Open Graph -->
   <meta property="og:title" content="工程師作品集" />
   <meta property="og:description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="/" />
   <meta property="og:image" content="/og.png" />
 
   <!-- Twitter -->
@@ -21,13 +19,6 @@
   <meta name="twitter:title" content="工程師作品集" />
   <meta name="twitter:description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
   <meta name="twitter:image" content="/og.png" />
-
-  <!-- (可選) favicon -->
-  <!--
-  <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  -->
 </head>
 
 <body>
@@ -51,7 +42,6 @@
   </div>
 
   <main class="container">
-    <!-- Header -->
     <section class="card hero">
       <div class="hero-top">
         <div class="hero-title">
@@ -82,7 +72,6 @@
       </div>
     </section>
 
-    <!-- Bento -->
     <section class="bento">
       <article class="card about">
         <h2>自我介紹</h2>
@@ -110,11 +99,14 @@
             </select>
           </div>
         </div>
+
+        <!-- ✅ 新增：標籤篩選列 -->
+        <div class="tagbar" id="tagBar"></div>
+
         <p class="muted mini" id="pageHint">提示：點作品卡片可進入詳細頁；縮圖可用圖片網址。</p>
       </article>
 
       <article class="card projects">
-        <!-- ✅ 這裡會由 main.js 切換：列表 or 詳細頁 -->
         <div id="routeRoot"></div>
       </article>
     </section>
@@ -142,6 +134,12 @@
         <label class="full">
           <span>作品縮圖（圖片網址）</span>
           <input class="input" name="thumb" placeholder="https://...（可留空，會自動生成預設縮圖）" />
+        </label>
+
+        <!-- ✅ 新增：標籤 -->
+        <label class="full">
+          <span>標籤（用逗號分隔）</span>
+          <input class="input" name="tags" placeholder="例如：React, Firebase, LINE Bot" />
         </label>
 
         <label class="full">
