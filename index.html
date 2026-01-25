@@ -4,14 +4,27 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>工程師作品集</title>
-
-  <!-- Favicon（有需要再加） -->
-  <!-- <link rel="icon" href="/favicon.ico" sizes="any"> -->
 </head>
 
 <body>
   <div class="bg-orb orb1"></div>
   <div class="bg-orb orb2"></div>
+
+  <!-- ✅ Turnstile Gate：任何人進站先驗證 -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <div class="gate-title">進入前請先驗證</div>
+      <div class="gate-sub muted">通過 Turnstile 後才會顯示網站內容。</div>
+
+      <div class="cf-turnstile"
+           data-sitekey="0x4AAAAAACQYftaDCMHt7drM"
+           data-callback="onTurnstileSuccess"
+           data-expired-callback="onTurnstileExpired"
+           data-error-callback="onTurnstileError"></div>
+
+      <div class="muted mini" id="gateMsg"></div>
+    </div>
+  </div>
 
   <main class="container">
     <section class="card hero">
@@ -61,8 +74,6 @@
       <article class="card tools">
         <div class="row-between">
           <h2>作品列表</h2>
-
-          <!-- ✅ 這塊會用 CSS 修掉溢出 -->
           <div class="right-tools">
             <input class="input" id="search" placeholder="搜尋作品名稱/介紹/prompt…" />
             <select class="select" id="sort">
@@ -73,7 +84,6 @@
             </select>
           </div>
         </div>
-
         <p class="muted mini">提示：縮圖用「圖片網址」即可，不需要 Firebase Storage。</p>
       </article>
 
@@ -116,12 +126,6 @@
           <span>作品 AI Prompt</span>
           <textarea class="textarea" name="prompt" rows="4" placeholder="你用來產出此作品的 prompt / 指令"></textarea>
         </label>
-
-        <!-- ✅ Turnstile -->
-        <div class="turnstile-wrap full">
-          <div class="cf-turnstile" data-sitekey="0x4AAAAAACQYftaDCMHt7drM"></div>
-          <p class="muted mini">請先通過 Turnstile 驗證再送出。</p>
-        </div>
       </div>
 
       <div class="modal-actions">
@@ -184,7 +188,7 @@
     </form>
   </dialog>
 
-  <!-- ✅ Turnstile script -->
+  <!-- ✅ Turnstile script（必須） -->
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
   <script type="module" src="/src/main.js"></script>
