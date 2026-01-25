@@ -1,17 +1,221 @@
 <!doctype html>
 <html lang="zh-Hant">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Terry EDU</title>
+  <title>工程師作品集</title>
+  <meta name="description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="/" />
 
-    <!-- ✅ favicon：如果你有 /public/favicon.ico 就會吃這個 -->
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-  </head>
+  <!-- Open Graph -->
+  <meta property="og:title" content="工程師作品集" />
+  <meta property="og:description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="/" />
+  <meta property="og:image" content="/og.png" />
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="工程師作品集" />
+  <meta name="twitter:description" content="以 vibe coding 打造 LINE Bot、校園系統與各種快速原型的作品集網站。" />
+  <meta name="twitter:image" content="/og.png" />
+
+  <!-- (可選) favicon -->
+  <!--
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  -->
+</head>
+
+<body>
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
+
+  <!-- ✅ Turnstile Gate：任何人進站先驗證 -->
+  <div id="gate" class="gate">
+    <div class="gate-card">
+      <div class="gate-title">進入前請先驗證</div>
+      <div class="gate-sub muted">通過 Turnstile 後才會顯示網站內容。</div>
+
+      <div class="cf-turnstile"
+           data-sitekey="0x4AAAAAACQYftaDCMHt7drM"
+           data-callback="onTurnstileSuccess"
+           data-expired-callback="onTurnstileExpired"
+           data-error-callback="onTurnstileError"></div>
+
+      <div class="muted mini" id="gateMsg"></div>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- Header -->
+    <section class="card hero">
+      <div class="hero-top">
+        <div class="hero-title">
+          <p class="badge">工程師 · Vibe Coding</p>
+          <h1 id="name">我的作品集</h1>
+          <p class="muted" id="tagline">LINE Bot / 校園系統 / 各種快速原型與自動化。</p>
+        </div>
+
+        <div class="hero-actions">
+          <button class="btn ghost" id="btnLogin">Google 登入</button>
+          <button class="btn ghost" id="btnLogout" hidden>登出</button>
+
+          <button class="btn ghost" id="btnEditProfile" hidden>編輯個人資料</button>
+          <button class="btn" id="btnAdd" hidden>＋ 新增作品</button>
+        </div>
+      </div>
+
+      <div class="hero-bottom">
+        <div class="stat">
+          <div class="stat-num" id="projectCount">0</div>
+          <div class="stat-label">作品數</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="lastUpdated">—</div>
+          <div class="stat-label">最後更新</div>
+        </div>
+        <div class="hint muted" id="authHint">訪客模式：只能瀏覽。登入後可新增/編輯/刪除。</div>
+      </div>
+    </section>
+
+    <!-- Bento -->
+    <section class="bento">
+      <article class="card about">
+        <h2>自我介紹</h2>
+        <p class="muted" id="aboutText">
+          我是一位工程師，習慣用 vibe coding 把想法快速做成可用系統。
+          擅長從需求拆解、資料流設計到前後端串接，並善用 AI prompt 加速迭代。
+        </p>
+      </article>
+
+      <article class="card social">
+        <h2>社群連結</h2>
+        <div class="social-list" id="socialList"></div>
+      </article>
+
+      <article class="card tools">
+        <div class="row-between">
+          <h2 id="pageTitle">作品列表</h2>
+          <div class="right-tools" id="listToolbar">
+            <input class="input" id="search" placeholder="搜尋作品名稱/介紹/prompt…" />
+            <select class="select" id="sort">
+              <option value="updated_desc">更新：新 → 舊</option>
+              <option value="updated_asc">更新：舊 → 新</option>
+              <option value="name_asc">名稱：A → Z</option>
+              <option value="name_desc">名稱：Z → A</option>
+            </select>
+          </div>
+        </div>
+        <p class="muted mini" id="pageHint">提示：點作品卡片可進入詳細頁；縮圖可用圖片網址。</p>
+      </article>
+
+      <article class="card projects">
+        <!-- ✅ 這裡會由 main.js 切換：列表 or 詳細頁 -->
+        <div id="routeRoot"></div>
+      </article>
+    </section>
+  </main>
+
+  <!-- Project Modal -->
+  <dialog class="modal" id="modalProject">
+    <form class="modal-inner" id="projectForm">
+      <div class="modal-head">
+        <h3 id="modalTitle">新增作品</h3>
+        <button class="icon-btn" type="button" id="btnCloseProject" aria-label="close">✕</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>作品名稱</span>
+          <input class="input" name="title" required placeholder="例如：校園請假系統" />
+        </label>
+
+        <label>
+          <span>作品連結</span>
+          <input class="input" name="url" required placeholder="https://..." />
+        </label>
+
+        <label class="full">
+          <span>作品縮圖（圖片網址）</span>
+          <input class="input" name="thumb" placeholder="https://...（可留空，會自動生成預設縮圖）" />
+        </label>
+
+        <label class="full">
+          <span>作品介紹</span>
+          <textarea class="textarea" name="description" rows="4" placeholder="做了什麼、解決什麼、你負責哪些部分"></textarea>
+        </label>
+
+        <label class="full">
+          <span>作品 AI Prompt</span>
+          <textarea class="textarea" name="prompt" rows="4" placeholder="你用來產出此作品的 prompt / 指令"></textarea>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <input type="hidden" name="id" />
+        <button class="btn ghost" type="button" id="btnCancelProject">取消</button>
+        <button class="btn" type="submit">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Profile Modal -->
+  <dialog class="modal" id="modalProfile">
+    <form class="modal-inner" id="profileForm">
+      <div class="modal-head">
+        <h3>編輯個人資料</h3>
+        <button class="icon-btn" type="button" id="btnCloseProfile" aria-label="close">✕</button>
+      </div>
+
+      <div class="form-grid">
+        <label>
+          <span>姓名 / 標題</span>
+          <input class="input" name="name" placeholder="例如：許哲銘 / Alex" />
+        </label>
+
+        <label>
+          <span>一句話標語</span>
+          <input class="input" name="tagline" placeholder="例如：把點子快速變成可用作品" />
+        </label>
+
+        <label class="full">
+          <span>自我介紹</span>
+          <textarea class="textarea" name="about" rows="5" placeholder="你的背景、擅長領域、代表作品方向"></textarea>
+        </label>
+
+        <label>
+          <span>GitHub</span>
+          <input class="input" name="github" placeholder="https://github.com/..." />
+        </label>
+
+        <label>
+          <span>LinkedIn</span>
+          <input class="input" name="linkedin" placeholder="https://linkedin.com/in/..." />
+        </label>
+
+        <label>
+          <span>Instagram</span>
+          <input class="input" name="instagram" placeholder="https://instagram.com/..." />
+        </label>
+
+        <label>
+          <span>Email</span>
+          <input class="input" name="email" placeholder="you@example.com" />
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn ghost" type="button" id="btnCancelProfile">取消</button>
+        <button class="btn" type="submit">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script type="module" src="/src/main.js"></script>
+</body>
 </html>
