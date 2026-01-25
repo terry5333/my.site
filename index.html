@@ -4,10 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>工程師作品集</title>
-  <link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+  <!-- Favicon（有需要再加） -->
+  <!-- <link rel="icon" href="/favicon.ico" sizes="any"> -->
 </head>
 
 <body>
@@ -15,7 +14,6 @@
   <div class="bg-orb orb2"></div>
 
   <main class="container">
-    <!-- Header -->
     <section class="card hero">
       <div class="hero-top">
         <div class="hero-title">
@@ -46,7 +44,6 @@
       </div>
     </section>
 
-    <!-- Bento -->
     <section class="bento">
       <article class="card about">
         <h2>自我介紹</h2>
@@ -64,6 +61,8 @@
       <article class="card tools">
         <div class="row-between">
           <h2>作品列表</h2>
+
+          <!-- ✅ 這塊會用 CSS 修掉溢出 -->
           <div class="right-tools">
             <input class="input" id="search" placeholder="搜尋作品名稱/介紹/prompt…" />
             <select class="select" id="sort">
@@ -74,6 +73,7 @@
             </select>
           </div>
         </div>
+
         <p class="muted mini">提示：縮圖用「圖片網址」即可，不需要 Firebase Storage。</p>
       </article>
 
@@ -88,7 +88,6 @@
     <form class="modal-inner" id="projectForm">
       <div class="modal-head">
         <h3 id="modalTitle">新增作品</h3>
-        <!-- ✅ 重要：type="button" 才不會觸發 submit -->
         <button class="icon-btn" type="button" id="btnCloseProject" aria-label="close">✕</button>
       </div>
 
@@ -117,11 +116,16 @@
           <span>作品 AI Prompt</span>
           <textarea class="textarea" name="prompt" rows="4" placeholder="你用來產出此作品的 prompt / 指令"></textarea>
         </label>
+
+        <!-- ✅ Turnstile -->
+        <div class="turnstile-wrap full">
+          <div class="cf-turnstile" data-sitekey="請換成你的SITE_KEY"></div>
+          <p class="muted mini">請先通過 Turnstile 驗證再送出。</p>
+        </div>
       </div>
 
       <div class="modal-actions">
         <input type="hidden" name="id" />
-        <!-- ✅ 重要：取消一定要 type="button" -->
         <button class="btn ghost" type="button" id="btnCancelProject">取消</button>
         <button class="btn" type="submit">儲存</button>
       </div>
@@ -179,6 +183,9 @@
       </div>
     </form>
   </dialog>
+
+  <!-- ✅ Turnstile script -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 
   <script type="module" src="/src/main.js"></script>
 </body>
